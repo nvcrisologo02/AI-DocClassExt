@@ -69,8 +69,7 @@ function Add-Fallo([string]$Recurso, [string]$Rol, [string]$Seccion) {
 function Test-Lectura([string[]]$Arguments) {
     $ErrorActionPreference = 'Continue'
     $res = Invoke-ReleaseAz -Arguments $Arguments
-    if ($LASTEXITCODE -ne 0) { return $false }
-    return ($null -ne $res)
+    return ($LASTEXITCODE -eq 0)
 }
 
 function Test-KuduAlcanzable([string]$App, [string]$Grupo, [string]$Tipo) {

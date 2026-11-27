@@ -95,4 +95,40 @@ Describe 'Invoke-ReleaseGuard' {
         $script:code | Should -Be 2
         ([regex]::Matches($script:out, 'task\.logissue type=error')).Count | Should -BeGreaterOrEqual 3
     }
+
+    Context 'comprobacion de permisos (sin -SinPermisos)' {
+        BeforeAll {
+            function New-PermisosStub([string]$Name, [string]$Body) {
+                $f = Join-Path $TestDrive $Name
+                [System.IO.File]::WriteAllText($f, 'param([string]$Environment, [string]$SqlServer, [string]$SqlDatabase)' + "`n" + $Body)
+                return $f
+            }
+            function Invoke-GuardPermisos([string]$Stub) {
+                $script:out = & $script:guard -Environment pre -SourceBranch refs/heads/develop -RepoRoot $script:fixtures `
+                    -SqlServer srbsqltest -AprobadoresPath $script:aprobOk -PermisosScriptPath $Stub 6>&1 | Out-String
+                $script:code = $LASTEXITCODE
+            }
+        }
+        It 'falla si el script de permisos no existe' {
+            Invoke-GuardPermisos (Join-Path $TestDrive 'no-existe.ps1')
+            $script:code | Should -Be 2
+            $script:out | Should -Match 'No existe el script de permisos'
+        }
+        It 'falla si el script de permisos lanza una excepcion' {
+            Invoke-GuardPermisos (New-PermisosStub 'permisos-crash.ps1' 'throw "boom"')
+            $script:code | Should -Be 2
+            $script:out | Should -Match 'boom'
+        }
+        It 'falla con exit 2 y un logissue por linea cuando el script de permisos devuelve 2' {
+            Invoke-GuardPermisos (New-PermisosStub 'permisos-2.ps1' 'Write-Host "recursoA - rol - ref"; Write-Host "recursoB - rol - ref"; exit 2')
+            $script:code | Should -Be 2
+            $script:out | Should -Match 'logissue type=error\]recursoA'
+            $script:out | Should -Match 'logissue type=error\]recursoB'
+        }
+        It 'pasa con exit 0 cuando el script de permisos devuelve 0' {
+            Invoke-GuardPermisos (New-PermisosStub 'permisos-0.ps1' 'exit 0')
+            $script:code | Should -Be 0
+            $script:out | Should -Match 'variable=version;isOutput=true\]v1\.2\.0'
+        }
+    }
 }

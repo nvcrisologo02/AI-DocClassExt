@@ -40,6 +40,9 @@
 
 .PARAMETER SinPermisos
     Omite la comprobacion de permisos (solo para tests).
+
+.PARAMETER PermisosScriptPath
+    Ruta del script de permisos. Por defecto, Test-ReleasePermisos.ps1 junto a este (el parametro es para tests).
 #>
 [CmdletBinding()]
 param(
@@ -50,7 +53,8 @@ param(
     [string]$SqlDatabase = 'DocumentIA',
     [Parameter(Mandatory)][string]$AprobadoresPath,
     [AllowEmptyString()][string]$SimularFalloEn = '',
-    [switch]$SinPermisos
+    [switch]$SinPermisos,
+    [string]$PermisosScriptPath
 )
 
 $ErrorActionPreference = 'Continue'
@@ -116,8 +120,27 @@ if ($version) {
 
 # 7. Permisos.
 if (-not $SinPermisos) {
-    $salida = & (Join-Path $PSScriptRoot 'Test-ReleasePermisos.ps1') -Environment $Environment -SqlServer $SqlServer -SqlDatabase $SqlDatabase 6>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { Add-Fallo "Permisos insuficientes:`n$($salida.TrimEnd())" }
+    if (-not $PermisosScriptPath) { $PermisosScriptPath = Join-Path $PSScriptRoot 'Test-ReleasePermisos.ps1' }
+    if (-not (Test-Path -LiteralPath $PermisosScriptPath -PathType Leaf)) {
+        Add-Fallo "No existe el script de permisos '$PermisosScriptPath'; no se puede comprobar."
+    }
+    else {
+        $global:LASTEXITCODE = 1
+        $salida = ''
+        try {
+            $salida = & $PermisosScriptPath -Environment $Environment -SqlServer $SqlServer -SqlDatabase $SqlDatabase 6>&1 | Out-String
+        }
+        catch {
+            $global:LASTEXITCODE = 1
+            $salida = "El script de permisos fallo: $($_.Exception.Message)"
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Add-Fallo 'Permisos insuficientes o no comprobables:'
+            foreach ($linea in ($salida -split '\r?\n' | Where-Object { $_.Trim() })) {
+                Write-Host "##vso[task.logissue type=error]$linea"
+            }
+        }
+    }
 }
 
 if ($fallos.Count -gt 0) { exit 2 }

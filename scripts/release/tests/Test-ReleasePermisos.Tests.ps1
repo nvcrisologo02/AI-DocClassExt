@@ -43,4 +43,10 @@ Describe 'Test-ReleasePermisos' {
         $LASTEXITCODE | Should -Be 2
         $out | Should -Match 'srbappdevdocai'
     }
+
+    It 'un resultado vacio con exit 0 (contenedor vacio) no es un fallo de permiso' {
+        Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 0; $null } -ParameterFilter { $Arguments -contains 'blob' }
+        $null = & $script:permisos -Environment pre -SqlServer srbsqlpredocai 6>&1
+        $LASTEXITCODE | Should -Be 0
+    }
 }
