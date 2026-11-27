@@ -135,6 +135,11 @@ Describe 'ConvertTo-ReleaseAzArgumento' {
     It 'no toca un argumento que ya empieza por comilla doble' {
         ConvertTo-ReleaseAzArgumento -Argumento '"ya"' -EsWindows $true | Should -Be '"ya"'
     }
+    It 'no toca un argumento con comillas dobles embebidas en cualquier posicion' {
+        $json = '{"k":"a(b)"}'
+        ConvertTo-ReleaseAzArgumento -Argumento $json -EsWindows $true | Should -Be $json
+        ConvertTo-ReleaseAzArgumento -Argumento 'K="a&b"' -EsWindows $true | Should -Be 'K="a&b"'
+    }
     It 'no toca un argumento sin caracteres especiales' {
         ConvertTo-ReleaseAzArgumento -Argumento 'abc' -EsWindows $true | Should -Be 'abc'
         ConvertTo-ReleaseAzArgumento -Argumento '--query' -EsWindows $true | Should -Be '--query'

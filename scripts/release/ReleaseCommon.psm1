@@ -307,7 +307,15 @@ function ConvertTo-ReleaseAzArgumento {
         PowerShell solo entrecomilla los argumentos con espacios. Los que llevan alguno de ( ) & | < > ^
         y no llevan espacios ni empiezan por comilla doble llegan sin comillas al cmd.exe de az.cmd y lo
         rompen ("-o was unexpected at this time", codigo 255). Se envuelven en comillas dobles literales.
+        Un argumento con comillas dobles en cualquier posicion se devuelve sin tocar: envolverlo
+        invertiria la paridad de comillas para cmd.exe y dejaria sin proteger lo que ya lo estaba.
         EsWindows permite probar la rama sin depender del sistema; por defecto es $IsWindows.
+
+        Limites conocidos (no se cubren a proposito, el comportamiento no cambia):
+        - %: cmd.exe expande %VAR% incluso entre comillas; un argumento con % no se protege.
+        - !: solo importa con expansion retardada de cmd (/V:ON), que az.cmd no activa.
+        - \ final: un argumento que acaba en barra invertida, ya envuelto, haria que la barra
+          escape la comilla de cierre.
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -316,7 +324,7 @@ function ConvertTo-ReleaseAzArgumento {
         [bool]$EsWindows = $IsWindows
     )
     if (-not $EsWindows) { return $Argumento }
-    if ($Argumento.StartsWith('"') -or $Argumento -match '\s') { return $Argumento }
+    if ($Argumento.Contains('"') -or $Argumento -match '\s') { return $Argumento }
     if ($Argumento -match '[()&|<>^]') { return ('"' + $Argumento + '"') }
     return $Argumento
 }
