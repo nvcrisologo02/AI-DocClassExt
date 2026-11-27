@@ -13,6 +13,16 @@ Describe 'ConvertTo-ReleaseArgumentList' {
     It 'respeta comillas simples' {
         ConvertTo-ReleaseArgumentList -Argumentos "-A 'x y' -B" -Environment dev | Should -Be @('-A', 'x y', '-B')
     }
+    It 'conserva el caracter | dentro del token' {
+        ConvertTo-ReleaseArgumentList -Argumentos '-A a|b -B c' -Environment dev | Should -Be @('-A', 'a|b', '-B', 'c')
+    }
+    It 'sustituye <env> repetido dentro de un token y entre tokens' {
+        ConvertTo-ReleaseArgumentList -Argumentos '<env>-<env> x<env> <env>' -Environment pre | Should -Be @('pre-pre', 'xpre', 'pre')
+    }
+    It 'lanza con comillas sin cerrar' {
+        { ConvertTo-ReleaseArgumentList -Argumentos '-A "sin cerrar' -Environment dev } | Should -Throw
+        { ConvertTo-ReleaseArgumentList -Argumentos "-A 'sin cerrar" -Environment dev } | Should -Throw
+    }
     It 'devuelve lista vacia con entrada vacia o en blanco' {
         @(ConvertTo-ReleaseArgumentList -Argumentos '   ' -Environment dev).Count | Should -Be 0
         @(ConvertTo-ReleaseArgumentList -Argumentos '' -Environment dev).Count | Should -Be 0

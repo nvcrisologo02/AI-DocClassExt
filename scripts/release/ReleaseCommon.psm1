@@ -18,6 +18,7 @@ function ConvertTo-ReleaseArgumentList {
     .DESCRIPTION
         Automata de tres estados (fuera, comilla simple, comilla doble). Las comillas se quitan
         del token. Tras tokenizar se sustituye <env> literalmente en cada token. No evalua nada.
+        Los consumidores envuelven el resultado en @(...) para tratar siempre una lista.
     #>
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -104,6 +105,7 @@ function Get-ReleaseBranchEsperada {
         Rama que debe desplegarse en el entorno: pre -> develop, prod -> master, dev -> cualquiera ($null).
     #>
     [CmdletBinding()]
+    [OutputType([string])]
     param([Parameter(Mandatory)][ValidateSet('dev', 'pre', 'prod')][string]$Environment)
     switch ($Environment) {
         'pre' { 'refs/heads/develop' }
@@ -134,11 +136,35 @@ function Get-DryRunSwitchName {
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$ScriptPath)
+    # Replica de la deteccion de Test-ReleaseManifest.ps1 (linea del param DryRun/WhatIf); no se refactoriza ese script a proposito
     $contenido = Get-Content -LiteralPath $ScriptPath -Raw
     if ($contenido -match '(?i)\[switch\]\s*\$DryRun\b') { return 'DryRun' }
     if ($contenido -match '(?i)\[switch\]\s*\$WhatIf\b') { return 'WhatIf' }
     if ($contenido -match '(?i)SupportsShouldProcess') { return 'WhatIf' }
     throw "El script '$ScriptPath' no admite -DryRun ni -WhatIf."
+}
+
+function Get-ReleaseSqlConnection {
+    <#
+    .SYNOPSIS
+        Crea (sin abrir) una conexion a Azure SQL autenticada con token de Entra obtenido con az.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Data.SqlClient.SqlConnection])]
+    param(
+        [Parameter(Mandatory)][string]$Server,
+        [Parameter(Mandatory)][string]$Database
+    )
+    if ($Server -notmatch '\.') { $Server = "$Server.database.windows.net" }
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $token = (& az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv 2>$null)
+    $codigo = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($codigo -ne 0 -or [string]::IsNullOrWhiteSpace($token)) { throw 'No se pudo obtener el token de Azure SQL con az.' }
+    $conn = [System.Data.SqlClient.SqlConnection]::new("Server=tcp:$Server,1433;Database=$Database;Encrypt=True;TrustServerCertificate=False;")
+    $conn.AccessToken = ($token | Select-Object -First 1).Trim()
+    return $conn
 }
 
 function Invoke-ReleaseSql {
@@ -154,15 +180,7 @@ function Invoke-ReleaseSql {
         [hashtable]$Parameters,
         [switch]$Scalar
     )
-    if ($Server -notmatch '\.') { $Server = "$Server.database.windows.net" }
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $token = (& az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv 2>$null)
-    $codigo = $LASTEXITCODE
-    $ErrorActionPreference = $prev
-    if ($codigo -ne 0 -or [string]::IsNullOrWhiteSpace($token)) { throw 'No se pudo obtener el token de Azure SQL con az.' }
-    $conn = [System.Data.SqlClient.SqlConnection]::new("Server=tcp:$Server,1433;Database=$Database;Encrypt=True;TrustServerCertificate=False;")
-    $conn.AccessToken = ($token | Select-Object -First 1).Trim()
+    $conn = Get-ReleaseSqlConnection -Server $Server -Database $Database
     try {
         $conn.Open()
         $cmd = $conn.CreateCommand()
@@ -182,6 +200,103 @@ function Invoke-ReleaseSql {
         return , $tabla
     }
     finally { $conn.Dispose() }
+}
+
+function Invoke-ReleaseSqlTransaccion {
+    <#
+    .SYNOPSIS
+        Ejecuta una lista de sentencias en orden, en una sola conexion y una sola transaccion.
+    .DESCRIPTION
+        Devuelve [int[]] con las filas afectadas de cada sentencia, en el mismo orden. Ante
+        cualquier error hace ROLLBACK y relanza. CommandTimeout 600.
+    #>
+    [CmdletBinding()]
+    [OutputType([int[]])]
+    param(
+        [Parameter(Mandatory)][string]$Server,
+        [Parameter(Mandatory)][string]$Database,
+        [Parameter(Mandatory)][string[]]$Queries
+    )
+    $conn = Get-ReleaseSqlConnection -Server $Server -Database $Database
+    try {
+        $conn.Open()
+        $tx = $conn.BeginTransaction()
+        $filas = [System.Collections.Generic.List[int]]::new()
+        try {
+            foreach ($q in $Queries) {
+                $cmd = $conn.CreateCommand()
+                $cmd.Transaction = $tx
+                $cmd.CommandText = $q
+                $cmd.CommandTimeout = 600
+                $filas.Add([int]$cmd.ExecuteNonQuery())
+            }
+            $tx.Commit()
+        }
+        catch {
+            try { $tx.Rollback() } catch { Write-Verbose "Rollback fallido: $($_.Exception.Message)" }
+            throw
+        }
+        return , ([int[]]$filas.ToArray())
+    }
+    finally { $conn.Dispose() }
+}
+
+function New-ReleaseRestoreSql {
+    <#
+    .SYNOPSIS
+        Genera el SQL que devuelve una tabla al estado de su copia (foto) en dos pasadas.
+    .DESCRIPTION
+        Pasada1Update: UPDATE de las filas con pareja por clave primaria cuyos valores difieren (EXCEPT
+        trata NULL como igual); vacio si no hay columnas fuera de la clave. Pasada1Insert: INSERT de las
+        filas de la copia sin pareja (con SET IDENTITY_INSERT ON/OFF si TieneIdentity). Pasada2Delete:
+        DELETE de las filas de la tabla sin pareja en la copia. Pasada1 = Update + Insert; Pasada2 = Delete.
+        Los identificadores van entre corchetes y los nombres se validan con ^[A-Za-z0-9_]+$. No usa MERGE.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$Tabla,
+        [Parameter(Mandatory)][string]$Copia,
+        [Parameter(Mandatory)][string[]]$ClavePrimaria,
+        [Parameter(Mandatory)][string[]]$Columnas,
+        [Parameter(Mandatory)][bool]$TieneIdentity
+    )
+    foreach ($n in @($Tabla, $Copia) + @($ClavePrimaria) + @($Columnas)) {
+        if ($n -cnotmatch '^[A-Za-z0-9_]+$') { throw "Nombre de objeto no valido: '$n'" }
+    }
+    $t = "[dbo].[$Tabla]"
+    $f = "[dbo].[$Copia]"
+    $cond = ($ClavePrimaria | ForEach-Object { "t.[$_] = f.[$_]" }) -join ' AND '
+    $condInv = ($ClavePrimaria | ForEach-Object { "f.[$_] = t.[$_]" }) -join ' AND '
+    $noClave = @($Columnas | Where-Object { $ClavePrimaria -cnotcontains $_ })
+    $nl = [Environment]::NewLine
+
+    $update = ''
+    if ($noClave.Count -gt 0) {
+        $set = ($noClave | ForEach-Object { "[$_] = f.[$_]" }) -join ', '
+        $colsT = ($noClave | ForEach-Object { "t.[$_]" }) -join ', '
+        $colsF = ($noClave | ForEach-Object { "f.[$_]" }) -join ', '
+        $update = "-- Pasada 1: $Tabla (UPDATE)$nl" +
+            "UPDATE t SET $set FROM $t t JOIN $f f ON $cond WHERE EXISTS (SELECT $colsT EXCEPT SELECT $colsF);"
+    }
+
+    $lista = ($Columnas | ForEach-Object { "[$_]" }) -join ', '
+    $insert = "-- Pasada 1: $Tabla (INSERT)$nl"
+    if ($TieneIdentity) { $insert += "SET IDENTITY_INSERT $t ON;$nl" }
+    $insert += "INSERT INTO $t ($lista) SELECT $lista FROM $f f WHERE NOT EXISTS (SELECT 1 FROM $t t WHERE $cond);"
+    if ($TieneIdentity) { $insert += "$($nl)SET IDENTITY_INSERT $t OFF;" }
+
+    $delete = "-- Pasada 2: $Tabla$nl" +
+        "DELETE t FROM $t t WHERE NOT EXISTS (SELECT 1 FROM $f f WHERE $condInv);"
+
+    $pasada1 = if ($update) { "$update$nl$insert" } else { $insert }
+    return @{
+        Pasada1Update = $update
+        Pasada1Insert = $insert
+        Pasada2Delete = $delete
+        Pasada1       = $pasada1
+        Pasada2       = $delete
+    }
 }
 
 function Invoke-ReleaseAz {
@@ -221,4 +336,4 @@ function Get-ReleaseAzUltimoExitCode {
 
 Export-ModuleMember -Function ConvertTo-ReleaseArgumentList, Get-ReleaseContentHash, New-EmbeddingsSql,
     Get-ReleaseBranchEsperada, ConvertTo-EnvironmentAlias, Get-DryRunSwitchName, Invoke-ReleaseSql,
-    Invoke-ReleaseAz, Get-ReleaseAzUltimoExitCode
+    Invoke-ReleaseSqlTransaccion, New-ReleaseRestoreSql, Invoke-ReleaseAz, Get-ReleaseAzUltimoExitCode
