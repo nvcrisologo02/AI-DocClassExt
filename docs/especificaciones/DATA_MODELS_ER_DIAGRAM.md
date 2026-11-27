@@ -1,6 +1,6 @@
 ﻿# Data Models & ER Diagram — DocumentIA
 
-> Última revisión: 2026-11-26 (AB#101570, entidad `ReleaseAplicada` y migración `20261126190743_ReleaseAplicada`). Revisión previa: 2026-11-22 (AB#101447, contraste con las entidades EF, `DocumentIADbContext`, las 38 migraciones de entonces de `src/backend/DocumentIA.Data/Migrations/` y los scripts de `scripts/database/`). Ahora son 39 migraciones. Versión del esquema: 1.25 (`20261126190743_ReleaseAplicada`).
+> Última revisión: 2026-11-27 (AB#101582, `ReleaseAplicada` aplicada en DEV). Revisión previa: 2026-11-26 (AB#101570, entidad `ReleaseAplicada` y migración `20261126190743_ReleaseAplicada`). Revisión previa: 2026-11-22 (AB#101447, contraste con las entidades EF, `DocumentIADbContext`, las 38 migraciones de entonces de `src/backend/DocumentIA.Data/Migrations/` y los scripts de `scripts/database/`). Ahora son 39 migraciones. Versión del esquema: 1.25 (`20261126190743_ReleaseAplicada`).
 
 ## 1. Introducción
 
@@ -881,7 +881,7 @@ PluginTipologiaConfigs.TipologiaCodigo → Tipologias.Codigo; PromptTemplates y 
 -6. **Registro de releases aplicadas** (2026-11-26, AB#101570)
    - Tabla `ReleaseAplicada` (`20261126190743_ReleaseAplicada`) para que la pipeline Release sepa qué pasos del manifiesto ya se aplicaron en cada entorno y no los repita
    - Solo la usa la pipeline por SQL; la aplicación no la lee. Sin claves foráneas
-   - Migración aditiva, pendiente de aplicar en DEV, PRE y PRO
+   - Migración aditiva, aplicada en DEV el 2026-11-27 (pipeline 807, run 80287; tabla vacía); pendiente en PRE y PRO
 
 -5. **Clave de intención en la deduplicación** (2026-10-13, AB#100930, ADR-003)
    - Una petición repetida solo reutiliza una ejecución anterior si coincide su `ClaveIntencion` (tipología esperada, instrucciones y modo), no solo el SHA256
