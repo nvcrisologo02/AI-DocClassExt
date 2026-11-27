@@ -148,7 +148,7 @@ Describe 'Invoke-ReleaseSmoke' {
         $LASTEXITCODE | Should -Be 2
     }
 
-    It 'la function key y environments.json no aparecen en OutDir; si estan los informes y ado-run' {
+    It 'la clave y environments.json no aparecen en OutDir; si estan los informes y ado-run' {
         Invoke-T9Smoke
         $LASTEXITCODE | Should -Be 0
         (Get-ChildItem $script:out -Recurse -File | Select-String -SimpleMatch $script:claveFalsa) | Should -BeNullOrEmpty
@@ -167,7 +167,13 @@ Describe 'Invoke-ReleaseSmoke' {
         [IO.File]::ReadAllText($script:envJson) | Should -Be $original
     }
 
-    It 'sale con 2 si functionKeys.default esta vacia y no lanza nada' {
+    It 'lee la clave maestra (masterKey), no functionKeys.default' {
+        Invoke-T9Smoke
+        $LASTEXITCODE | Should -Be 0
+        Should -Invoke Invoke-ReleaseAz -ParameterFilter { $Arguments -contains 'masterKey' -and $Arguments -notcontains 'functionKeys.default' } -Times 1 -Exactly
+    }
+
+    It 'sale con 2 si masterKey esta vacia y no lanza nada' {
         $global:T9Clave = ''
         Invoke-T9Smoke
         $LASTEXITCODE | Should -Be 2

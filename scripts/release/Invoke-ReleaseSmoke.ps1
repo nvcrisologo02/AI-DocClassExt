@@ -1,9 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Smoke E2E post-despliegue con function key temporal y publicacion en el Test Plan 100069.
+    Smoke E2E post-despliegue con clave maestra temporal y publicacion en el Test Plan 100069.
 
 .DESCRIPTION
-    1. Lee functionKeys.default de la Function App (secreto: ##vso[task.setsecret], nunca se imprime
+    1. Lee masterKey de la Function App (se usa la clave maestra porque la ingesta esta deshabilitada
+       durante la release y cualquier otra clave da 404 en una funcion deshabilitada) (secreto: ##vso[task.setsecret], nunca se imprime
        ni va a -OutDir; exit 2 si esta vacia) y escribe tests/e2e-postdeploy/config/environments.json
        con { "<alias>": { baseUrl, functionKey, healthCheck: true } }. Si el fichero ya existia, se
        guarda su contenido y se repone al final; si no existia, se borra al final (bloque finally).
@@ -25,7 +26,7 @@
     Resource group de la Function App.
 
 .PARAMETER FunctionApp
-    Nombre de la Function App de la que se lee la function key.
+    Nombre de la Function App de la que se lee la clave maestra.
 
 .PARAMETER BaseUrl
     URL base de la Function App (https://...).
@@ -115,10 +116,10 @@ $envJson = Join-Path $configDir 'environments.json'
 
 Write-Host "##vso[task.setsecret]$AdoToken"
 
-$clave = Invoke-ReleaseAz -Arguments @('functionapp', 'keys', 'list', '-n', $FunctionApp, '-g', $ResourceGroup, '--query', 'functionKeys.default')
+$clave = Invoke-ReleaseAz -Arguments @('functionapp', 'keys', 'list', '-n', $FunctionApp, '-g', $ResourceGroup, '--query', 'masterKey')
 $claveCodigo = $LASTEXITCODE
 if ($claveCodigo -ne 0 -or $null -eq $clave -or [string]::IsNullOrWhiteSpace([string]$clave)) {
-    Write-Host "No se pudo leer functionKeys.default de $FunctionApp"
+    Write-Host "No se pudo leer masterKey de $FunctionApp"
     exit 2
 }
 $clave = [string]$clave

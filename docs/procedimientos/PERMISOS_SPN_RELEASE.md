@@ -14,7 +14,7 @@ Por cada entorno, a la service connection del entorno (la identidad con la que c
 | Copiar el artefacto de embeddings, lectura en el origen | Storage Blob Data Reader | Storage de documentos del entorno origen | Stage `Configuracion`: `scripts/storage/copy-embeddings-artifacts.ps1` |
 | Copiar el artefacto de embeddings, escritura en el destino | Storage Blob Data Contributor | Storage de documentos del entorno destino | Stage `Configuracion`: `scripts/storage/copy-embeddings-artifacts.ps1` |
 | Leer la clave de la cuenta del task hub de Durable | `listKeys` (viene con Contributor sobre la cuenta). Si la service connection no es Contributor sobre esa cuenta: Storage Table Data Reader sobre ella | Storage del task hub del entorno | Stage `Foto`: drenado de Durable (espera a que la tabla de instancias no tenga `Running` ni `Pending`) |
-| Leer claves de función y reiniciar la Function App | Lectura de claves de función y reinicio | Function App del entorno | Stages `Foto`, `Configuracion`, `Altas` (reinicio y health) y `Verificacion` (la function key del smoke se lee en el momento y no se almacena) |
+| Leer claves de función y reiniciar la Function App | Lectura de claves de función y reinicio | Function App del entorno | Stages `Foto`, `Configuracion`, `Altas` (reinicio y health) y `Verificacion` (la clave maestra del smoke se lee en el momento y no se almacena; es la maestra porque la ingesta esta deshabilitada durante la release y cualquier otra clave da 404) |
 | Kudu con token de Entra | Contributor sobre el resource group del entorno (el token de ARM de la cuenta activa de `az` autentica contra `scm`) | Function App, Admin y AssetResolver del entorno | Stage `Foto`: descarga del paquete desplegado (vuelta atrás del código). La comprobación y la descarga corren desde un agente alojado (`windows-latest`): el `scm` de la Function App no resuelve desde el pool privado (endpoint privado sin enlace DNS a la VNet del pool) |
 | Escribir en Test Plans | Escritura en Test Plans del proyecto `AI DocClassExt` para la identidad del build (`System.AccessToken`, Project Collection Build Service) | Plan 100069 | Stage `Verificacion`: `tests/e2e-postdeploy/ado/publish-smk-run.ps1` (`-WhatIf` y real) |
 
@@ -50,7 +50,7 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | `srbkvdevdocai` | Key Vault Secrets Officer | `az keyvault secret list --vault-name srbkvdevdocai --query "length(@)"` |
 | `srbstgdevdocai` | Storage Blob Data Reader. Contributor solo si el ensayo copia en DEV (`copy-embeddings-artifacts.ps1` admite `dev` como destino solo con `-DryRun`) | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgdevappdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgdevappdocai --query "[0].keyName" -o tsv` |
-| `srbappdevdocai` | Claves de función y reinicio | `az functionapp keys list -n srbappdevdocai -g SRBRGDEVDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbappdevdocai -g SRBRGDEVDOCSAI --query state -o tsv` |
+| `srbappdevdocai` | Claves de función y reinicio | `az functionapp keys list -n srbappdevdocai -g SRBRGDEVDOCSAI --query "length(masterKey)"`; `az functionapp show -n srbappdevdocai -g SRBRGDEVDOCSAI --query state -o tsv` |
 
 ### 3.2 `AI DocClassExt PRE`
 
@@ -60,7 +60,7 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | `srbstgdevdocai` (origen de la copia; decidido: DEV → PRE, `-SourceEnvironment dev`) | Storage Blob Data Reader | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgpredocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgpredocai --container-name documentai --auth-mode login --num-results 1` (comprueba lectura; la escritura queda para el paso real) |
 | `srbstgpreappdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgpreappdocai --query "[0].keyName" -o tsv` |
-| `srbapppredocai` | Claves de función y reinicio | `az functionapp keys list -n srbapppredocai -g SRBRGPREDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbapppredocai -g SRBRGPREDOCSAI --query state -o tsv` |
+| `srbapppredocai` | Claves de función y reinicio | `az functionapp keys list -n srbapppredocai -g SRBRGPREDOCSAI --query "length(masterKey)"`; `az functionapp show -n srbapppredocai -g SRBRGPREDOCSAI --query state -o tsv` |
 
 ### 3.3 `AI DocClassExt PRO`
 
@@ -70,7 +70,7 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | `srbstgpredocai` (origen de la copia; decidido: PRE → PRO, `-SourceEnvironment pre`) | Storage Blob Data Reader | `az storage blob list --account-name srbstgpredocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgprodocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgprodocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgproapppdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgproapppdocai --query "[0].keyName" -o tsv` |
-| `srbappprodocai` | Claves de función y reinicio | `az functionapp keys list -n srbappprodocai -g SRBRGDOCSAIPROD --query "length(functionKeys)"`; `az functionapp show -n srbappprodocai -g SRBRGDOCSAIPROD --query state -o tsv` |
+| `srbappprodocai` | Claves de función y reinicio | `az functionapp keys list -n srbappprodocai -g SRBRGDOCSAIPROD --query "length(masterKey)"`; `az functionapp show -n srbappprodocai -g SRBRGDOCSAIPROD --query state -o tsv` |
 
 Decisión del usuario (2026-11-26): el artefacto de embeddings se copia por saltos, DEV → PRE y PRE → PRO, no DEV → PRO. El manifiesto de la v1.2.0 lleva un paso por salto (`-SourceEnvironment dev` para `pre`, `-SourceEnvironment pre` para `prod`). Por eso `AI DocClassExt PRO` necesita lectura (Storage Blob Data Reader) sobre `srbstgpredocai`, que es un recurso de otro entorno.
 

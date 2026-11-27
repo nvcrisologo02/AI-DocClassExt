@@ -115,7 +115,7 @@ Regla: un job se queda en `docia-mdp-private` solo si hace SQL, Key Vault (plano
 | `Codigo` | Un job por template, como en el 799, todos en agente alojado: `DeployFunctions` (`deploy-functions.yml` y `functions-settings.yml`), `DeployAdmin` (en paralelo a Functions) y `DeployAssetResolver` (tras Functions); `Validate` depende de los tres. Con varios templates en un mismo job, cada `checkout: self` deja el repo en `s/<nombre>` y fallan las rutas relativas de los scripts. |
 | `Configuracion` | Pasos del manifiesto, secretos heredados de Key Vault y ciclo de vida del storage (cada uno con `-WhatIf` antes del real), reinicio con health en un job aparte (`ReinicioJob`, agente alojado). |
 | `Altas` | Solo pre y prod: `config-seed` y `config-apply` con `applyMissingConfig`; reinicio con health en `ReinicioJob` (agente alojado). |
-| `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con function key temporal y publicación en el Test Plan 100069 (el smoke va en `SmokeJob`, agente alojado, tras `VerifJob`). |
+| `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con la clave maestra de la Function App (la ingesta esta deshabilitada durante la release y cualquier otra clave da 404) y publicación en el Test Plan 100069 (el smoke va en `SmokeJob`, agente alojado, tras `VerifJob`). |
 | `Fin` | Solo con todo en verde: ingesta activa, cierre en `ReleaseAplicada`, `resumen.md` y artefacto `release-<env>-<build>`. |
 | `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto desde `evidencias-FotoCodigo`, un job por app y solo si su job de `Codigo` no fue `Skipped` (`RevertirFunctions`, `RevertirAdmin` y `RevertirAssetResolver`, agente alojado), marca el registro como `Revertido`, rehabilita la ingesta (`Cierre`, que marca `Revertido` solo si `Restaurar` y los tres jobs de reversión acaban en `Succeeded`, `SucceededWithIssues` o `Skipped`), reinicia (`ReinicioVuelta`, agente alojado), publica el resumen en rojo, con los tres redespliegues por separado, y deja el run en rojo (`ResumenVuelta`, agente alojado). |
 
@@ -141,7 +141,7 @@ Regla: un job se queda en `docia-mdp-private` solo si hace SQL, Key Vault (plano
 | `Save-ReleaseFotoCodigo.ps1` | Descarga por Kudu, con token de Entra (sin autenticación básica), el código desplegado de las tres apps. |
 | `Invoke-ReleasePasos.ps1` | Aplica los pasos del manifiesto (con ensayo previo) y los registra por hash. |
 | `Restart-ReleaseFunctionApp.ps1` | Reinicia la Function App y espera al health. |
-| `Invoke-ReleaseSmoke.ps1` | Smoke E2E con function key temporal y publicación en el Test Plan 100069. |
+| `Invoke-ReleaseSmoke.ps1` | Smoke E2E con la clave maestra temporal y publicación en el Test Plan 100069. |
 | `New-ReleaseResumen.ps1` | Genera `resumen.md` a partir de las evidencias. |
 | `ReleaseCommon.psm1`, `ReleaseRegistro.psm1` | Utilidades de `az` y SQL, y registro en `ReleaseAplicada` (`Register-ReleaseCierre`, `Set-ReleaseRevertida`). |
 

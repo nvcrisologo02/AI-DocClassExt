@@ -127,7 +127,7 @@ if (-not $SoloKudu) {
         Add-Fallo $r.taskhub 'Contributor (listKeys) o Storage Table Data Reader' $sec
     }
     # Function App: claves y estado.
-    if (-not (Test-Lectura @('functionapp', 'keys', 'list', '-n', $r.func, '-g', $r.rg, '--query', 'length(functionKeys)'))) {
+    if (-not (Test-Lectura @('functionapp', 'keys', 'list', '-n', $r.func, '-g', $r.rg, '--query', 'length(masterKey)'))) {
         Add-Fallo $r.func 'lectura de claves de funcion' $sec
     }
     if (-not (Test-Lectura @('functionapp', 'show', '-n', $r.func, '-g', $r.rg, '--query', 'state', '-o', 'tsv'))) {
