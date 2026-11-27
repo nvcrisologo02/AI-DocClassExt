@@ -15,7 +15,7 @@ Por cada entorno, a la service connection del entorno (la identidad con la que c
 | Copiar el artefacto de embeddings, escritura en el destino | Storage Blob Data Contributor | Storage de documentos del entorno destino | Stage `Configuracion`: `scripts/storage/copy-embeddings-artifacts.ps1` |
 | Leer la clave de la cuenta del task hub de Durable | `listKeys` (viene con Contributor sobre la cuenta). Si la service connection no es Contributor sobre esa cuenta: Storage Table Data Reader sobre ella | Storage del task hub del entorno | Stage `Foto`: drenado de Durable (espera a que la tabla de instancias no tenga `Running` ni `Pending`) |
 | Leer claves de función y reiniciar la Function App | Lectura de claves de función y reinicio | Function App del entorno | Stages `Foto`, `Configuracion`, `Altas` (reinicio y health) y `Verificacion` (la function key del smoke se lee en el momento y no se almacena) |
-| Credenciales de publicación de Kudu | Lectura de las credenciales de publicación (las tiene si despliega) | Function App, Admin y AssetResolver del entorno | Stage `Foto`: descarga del paquete desplegado (vuelta atrás del código) |
+| Kudu con token de Entra | Contributor sobre el resource group del entorno (el token de ARM de la cuenta activa de `az` autentica contra `scm`) | Function App, Admin y AssetResolver del entorno | Stage `Foto`: descarga del paquete desplegado (vuelta atrás del código) |
 | Escribir en Test Plans | Escritura en Test Plans del proyecto `AI DocClassExt` para la identidad del build (`System.AccessToken`, Project Collection Build Service) | Plan 100069 | Stage `Verificacion`: `tests/e2e-postdeploy/ado/publish-smk-run.ps1` (`-WhatIf` y real) |
 
 Lo que ya existe y no se pide de nuevo: el despliegue de las tres apps y la aplicación de app settings (los pipelines 799, 800 y 802 ya lo hacen) y el acceso a SQL del entorno (`scripts/database/grant-pipeline-sql-user.sql` concede `db_ddladmin`, `db_datareader` y `db_datawriter`, suficientes para la tabla `ReleaseAplicada` y las copias `<Tabla>__rel_<BuildId>`; que el script esté aplicado en cada entorno es algo por confirmar).
@@ -50,8 +50,7 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | `srbkvdevdocai` | Key Vault Secrets Officer | `az keyvault secret list --vault-name srbkvdevdocai --query "length(@)"` |
 | `srbstgdevdocai` | Storage Blob Data Reader. Contributor solo si el ensayo copia en DEV (`copy-embeddings-artifacts.ps1` admite `dev` como destino solo con `-DryRun`) | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgdevappdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgdevappdocai --query "[0].keyName" -o tsv` |
-| `srbappdevdocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbappdevdocai -g SRBRGDEVDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbappdevdocai -g SRBRGDEVDOCSAI --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbappdevdocai -g SRBRGDEVDOCSAI --query publishingUserName -o tsv` |
-| `srbwebadmindevdocai`, `srbwebpluginassetresolverdev` | Credenciales de publicación de Kudu | `az webapp deployment list-publishing-credentials -n <app> -g SRBRGDEVDOCSAI --query publishingUserName -o tsv` |
+| `srbappdevdocai` | Claves de función y reinicio | `az functionapp keys list -n srbappdevdocai -g SRBRGDEVDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbappdevdocai -g SRBRGDEVDOCSAI --query state -o tsv` |
 
 ### 3.2 `AI DocClassExt PRE`
 
@@ -61,8 +60,7 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | `srbstgdevdocai` (origen de la copia; decidido: DEV → PRE, `-SourceEnvironment dev`) | Storage Blob Data Reader | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgpredocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgpredocai --container-name documentai --auth-mode login --num-results 1` (comprueba lectura; la escritura queda para el paso real) |
 | `srbstgpreappdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgpreappdocai --query "[0].keyName" -o tsv` |
-| `srbapppredocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbapppredocai -g SRBRGPREDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbapppredocai -g SRBRGPREDOCSAI --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbapppredocai -g SRBRGPREDOCSAI --query publishingUserName -o tsv` |
-| `srbwebadminpredocai`, `srbwebpluginassetresolverpre` | Credenciales de publicación de Kudu | `az webapp deployment list-publishing-credentials -n <app> -g SRBRGPREDOCSAI --query publishingUserName -o tsv` |
+| `srbapppredocai` | Claves de función y reinicio | `az functionapp keys list -n srbapppredocai -g SRBRGPREDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbapppredocai -g SRBRGPREDOCSAI --query state -o tsv` |
 
 ### 3.3 `AI DocClassExt PRO`
 
@@ -72,8 +70,7 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | `srbstgpredocai` (origen de la copia; decidido: PRE → PRO, `-SourceEnvironment pre`) | Storage Blob Data Reader | `az storage blob list --account-name srbstgpredocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgprodocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgprodocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgproapppdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgproapppdocai --query "[0].keyName" -o tsv` |
-| `srbappprodocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbappprodocai -g SRBRGDOCSAIPROD --query "length(functionKeys)"`; `az functionapp show -n srbappprodocai -g SRBRGDOCSAIPROD --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbappprodocai -g SRBRGDOCSAIPROD --query publishingUserName -o tsv` |
-| `srbwebadminprodocai`, `srbwebpluginassetresolver` | Credenciales de publicación de Kudu | `az webapp deployment list-publishing-credentials -n <app> -g SRBRGDOCSAIPROD --query publishingUserName -o tsv` |
+| `srbappprodocai` | Claves de función y reinicio | `az functionapp keys list -n srbappprodocai -g SRBRGDOCSAIPROD --query "length(functionKeys)"`; `az functionapp show -n srbappprodocai -g SRBRGDOCSAIPROD --query state -o tsv` |
 
 Decisión del usuario (2026-11-26): el artefacto de embeddings se copia por saltos, DEV → PRE y PRE → PRO, no DEV → PRO. El manifiesto de la v1.2.0 lleva un paso por salto (`-SourceEnvironment dev` para `pre`, `-SourceEnvironment pre` para `prod`). Por eso `AI DocClassExt PRO` necesita lectura (Storage Blob Data Reader) sobre `srbstgpredocai`, que es un recurso de otro entorno.
 
@@ -83,7 +80,7 @@ La identidad del build es el Project Collection Build Service del proyecto `AI D
 
 ## 4. Cómo se comprueba (stage `Guard`)
 
-`Guard` ejecuta `scripts/release/Test-ReleasePermisos.ps1` con la service connection del entorno, antes de abrir ninguna ventana y sin modificar nada. Solo hace lecturas y no imprime secretos: de las credenciales de publicación solo consulta el nombre de usuario. Si falla alguna lectura, el run termina en rojo (código de salida 2) con una línea por fallo, `<recurso> - <rol que falta> - PERMISOS_SPN_RELEASE.md, apartado 3.x`, y no se toca el entorno.
+`Guard` ejecuta `scripts/release/Test-ReleasePermisos.ps1` con la service connection del entorno, antes de abrir ninguna ventana y sin modificar nada. Solo hace lecturas y no imprime secretos: el token de Entra solo se envía en la cabecera `Authorization` de la petición a Kudu. Si falla alguna lectura, el run termina en rojo (código de salida 2) con una línea por fallo, `<recurso> - <rol que falta> - PERMISOS_SPN_RELEASE.md, apartado 3.x`, y no se toca el entorno.
 
 Lecturas definitivas, por entorno (las tablas del apartado 3 llevan los comandos de referencia):
 
@@ -95,10 +92,10 @@ Lecturas definitivas, por entorno (las tablas del apartado 3 llevan los comandos
 | Storage del task hub | `az storage account keys list` | Contributor (`listKeys`) o Storage Table Data Reader | `srbstgdevappdocai` | `srbstgpreappdocai` | `srbstgproapppdocai` |
 | Function App: claves de función | `az functionapp keys list` | lectura de claves de función | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
 | Function App: estado | `az functionapp show` | lectura y reinicio de la Function App | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
-| Function App: credenciales de publicación | `az functionapp deployment list-publishing-credentials` | credenciales de publicación (Kudu) | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
-| Admin y AssetResolver: credenciales de publicación | `az webapp deployment list-publishing-credentials` | credenciales de publicación (Kudu) | `srbwebadmindevdocai`, `srbwebpluginassetresolverdev` | `srbwebadminpredocai`, `srbwebpluginassetresolverpre` | `srbwebadminprodocai`, `srbwebpluginassetresolver` |
-| Kudu alcanzable (las tres apps) | `GET https://<app>.scm.azurewebsites.net/api/` con Basic de las credenciales de publicación | credenciales de publicación y acceso de red a `scm` | las tres apps de dev | las tres apps de pre | las tres apps de prod |
+| Kudu alcanzable (las tres apps) | `GET https://<app>.scm.azurewebsites.net/api/settings` con token de Entra de la SC (Contributor sobre el RG) | Contributor sobre el resource group y acceso de red a `scm` | las tres apps de dev | las tres apps de pre | las tres apps de prod |
 | Acceso SQL | `SELECT 1` en la base `DocumentIA` del servidor del entorno (`SQL_SERVER_NAME`) | `db_datareader` y `db_datawriter` (`grant-pipeline-sql-user.sql`) | `srbsqldevdocai` | `srbsqlpredocai` | `srbsqlprodocai` |
+
+La autenticación básica de SCM está deshabilitada en las apps y no hace falta: Guard y la foto de código usan el token de Entra de la service connection, y la autenticación básica no se reactiva.
 
 Los grupos de recursos son `SRBRGDEVDOCSAI` (dev), `SRBRGPREDOCSAI` (pre) y `SRBRGDOCSAIPROD` (prod).
 

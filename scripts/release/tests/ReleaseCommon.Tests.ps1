@@ -81,3 +81,79 @@ Describe 'Get-DryRunSwitchName' {
         { Get-DryRunSwitchName -ScriptPath "$TestDrive/c.ps1" } | Should -Throw
     }
 }
+
+Describe 'Invoke-ReleaseAz diagnostico de fallos' {
+    BeforeEach {
+        function global:az { $global:LASTEXITCODE = 3; Write-Error 'ERROR: (AuthorizationFailed) sin permiso' -ErrorAction Continue; Write-Error 'segunda linea' -ErrorAction Continue }
+    }
+    AfterEach { Remove-Item function:global:az -ErrorAction SilentlyContinue }
+
+    It 'escribe la linea con los tres primeros argumentos y el mensaje, sin el resto' {
+        $out = & { $r = Invoke-ReleaseAz -Arguments @('keyvault', 'secret', 'list', '--account-key', 'VALOR-SECRETO', '--vault-name', 'kv1') } 6>&1 | Out-String
+        $out | Should -Match 'az keyvault secret list fallo \(codigo 3\): ERROR: \(AuthorizationFailed\) sin permiso'
+        $out | Should -Not -Match 'VALOR-SECRETO'
+        $out | Should -Not -Match 'account-key'
+        $out | Should -Not -Match 'segunda linea'
+    }
+
+    It 'mantiene el contrato: devuelve $null y deja el codigo de salida' {
+        $r = Invoke-ReleaseAz -Arguments @('keyvault', 'secret', 'list') 6>$null
+        $r | Should -BeNullOrEmpty
+        Get-ReleaseAzUltimoExitCode | Should -Be 3
+    }
+
+    It 'sin ErrorRecord con ERROR usa la primera linea no vacia y recorta a 300' {
+        function global:az { $global:LASTEXITCODE = 1; Write-Error ('x' * 500) -ErrorAction Continue }
+        $out = & { $null = Invoke-ReleaseAz -Arguments @('webapp', 'config', 'show', '-n', 'a') } 6>&1 | Out-String
+        $out | Should -Match 'az webapp config show fallo \(codigo 1\): x{300}\s*$'
+        $out | Should -Not -Match 'x{301}'
+    }
+
+    It 'si az termina bien no escribe nada' {
+        function global:az { $global:LASTEXITCODE = 0; '{"a":1}' }
+        $out = & { $r = Invoke-ReleaseAz -Arguments @('webapp', 'show') } 6>&1 | Out-String
+        $out.Trim() | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-ReleaseKuduToken' {
+    BeforeEach { $script:tfPrev = $env:TF_BUILD }
+    AfterEach {
+        $env:TF_BUILD = $script:tfPrev
+        Remove-Item function:global:az -ErrorAction SilentlyContinue
+    }
+
+    It 'devuelve el token de ARM y pide el recurso de management' {
+        $env:TF_BUILD = $null
+        $global:AzArgsKudu = $null
+        function global:az { $global:AzArgsKudu = $args -join ' '; $global:LASTEXITCODE = 0; 'TOKEN-ARM-1' }
+        Get-ReleaseKuduToken | Should -Be 'TOKEN-ARM-1'
+        $global:AzArgsKudu | Should -Match 'account get-access-token --resource https://management.azure.com --query accessToken -o tsv'
+        Remove-Variable AzArgsKudu -Scope Global -ErrorAction SilentlyContinue
+    }
+
+    It 'con TF_BUILD=True emite setsecret antes de devolver el token' {
+        $env:TF_BUILD = 'True'
+        function global:az { $global:LASTEXITCODE = 0; 'TOKEN-ARM-2' }
+        $out = Get-ReleaseKuduToken 6>&1
+        $textos = @($out | ForEach-Object { "$_" })
+        $textos | Should -Contain '##vso[task.setsecret]TOKEN-ARM-2'
+        $textos | Should -Contain 'TOKEN-ARM-2'
+        [array]::IndexOf($textos, '##vso[task.setsecret]TOKEN-ARM-2') | Should -BeLessThan ([array]::IndexOf($textos, 'TOKEN-ARM-2'))
+    }
+
+    It 'sin TF_BUILD no emite setsecret' {
+        $env:TF_BUILD = $null
+        function global:az { $global:LASTEXITCODE = 0; 'TOKEN-ARM-3' }
+        $out = Get-ReleaseKuduToken 6>&1 | Out-String
+        $out | Should -Not -Match 'setsecret'
+    }
+
+    It 'devuelve $null si az falla o sale vacio' {
+        $env:TF_BUILD = $null
+        function global:az { $global:LASTEXITCODE = 1; $null }
+        Get-ReleaseKuduToken 6>$null | Should -BeNullOrEmpty
+        function global:az { $global:LASTEXITCODE = 0; '' }
+        Get-ReleaseKuduToken 6>$null | Should -BeNullOrEmpty
+    }
+}

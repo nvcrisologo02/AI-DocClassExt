@@ -17,6 +17,7 @@ Describe 'Test-ReleasePermisos' {
         Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 0; 'valor' }
         Mock Invoke-WebRequest { [pscustomobject]@{ StatusCode = 200 } }
         Mock Invoke-ReleaseSql { 1 }
+        Mock Get-ReleaseKuduToken { 'TOKEN-KUDU-XYZ' }
     }
 
     It 'falla con exit 2 y nombra el recurso cuando una lectura falla' {
@@ -48,5 +49,47 @@ Describe 'Test-ReleasePermisos' {
         Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 0; $null } -ParameterFilter { $Arguments -contains 'blob' }
         $null = & $script:permisos -Environment pre -SqlServer srbsqlpredocai 6>&1
         $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'Kudu usa Bearer (no Basic) contra /api/settings con timeout' {
+        $null = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1
+        Should -Invoke Invoke-WebRequest -Times 3 -Exactly -ParameterFilter {
+            $Uri -match '^https://(srbappdevdocai|srbwebadmindevdocai|srbwebpluginassetresolverdev)\.scm\.azurewebsites\.net/api/settings$' -and
+            $Headers.Authorization -ceq 'Bearer TOKEN-KUDU-XYZ' -and $TimeoutSec -eq 30 -and $SkipHttpErrorCheck
+        }
+        Should -Not -Invoke Invoke-WebRequest -ParameterFilter { $Headers.Authorization -like 'Basic*' }
+    }
+
+    It 'pide el token una sola vez para las tres apps' {
+        $null = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1
+        Should -Invoke Get-ReleaseKuduToken -Times 1 -Exactly
+    }
+
+    It 'un estado distinto de 200 falla con la linea Kudu <app>: HTTP <estado>' {
+        Mock Invoke-WebRequest { [pscustomobject]@{ StatusCode = 404 } }
+        $out = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        $out | Should -Match 'Kudu srbappdevdocai: HTTP 404'
+    }
+
+    It 'una excepcion de red escribe Kudu <app>: <mensaje> y falla' {
+        Mock Invoke-WebRequest { throw 'sin red' }
+        $out = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        $out | Should -Match 'Kudu srbappdevdocai: sin red'
+    }
+
+    It 'nunca imprime el token y sin token falla Kudu' {
+        $out1 = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1 | Out-String
+        $out1 | Should -Not -Match 'TOKEN-KUDU-XYZ'
+        Mock Get-ReleaseKuduToken { $null }
+        $out2 = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        $out2 | Should -Match 'Kudu srbappdevdocai'
+    }
+
+    It 'no llama a list-publishing-credentials' {
+        $null = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1
+        Should -Not -Invoke Invoke-ReleaseAz -ParameterFilter { $Arguments -contains 'list-publishing-credentials' }
     }
 }

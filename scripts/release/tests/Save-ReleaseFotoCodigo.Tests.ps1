@@ -39,8 +39,9 @@ Describe 'Save-ReleaseFotoCodigo' {
         Mock Invoke-ReleaseAz {
             $global:T7Llamadas.Add(($Arguments -join ' '))
             $global:LASTEXITCODE = 0
-            [pscustomobject]@{ u = '$usuario-kudu'; p = 'PWD-SECRETA-987' }
+            $null
         }
+        Mock Get-ReleaseKuduToken { 'TOKEN-SECRETO-987' }
         Mock Invoke-WebRequest {
             New-T7Zip -Ruta $OutFile -Vacio:$global:T7Vacio
         }
@@ -61,10 +62,18 @@ Describe 'Save-ReleaseFotoCodigo' {
         ($foto | ForEach-Object { $_.zip }) | Should -Be @('functions.zip', 'admin.zip', 'assetresolver.zip')
     }
 
-    It 'usa functionapp para functions y webapp para el resto' {
+    It 'descarga con Bearer, no Basic, desde /api/zip/site/wwwroot/ de cada app' {
         $null = & $script:save -ResourceGroup rg1 -Apps $script:apps -OutDir $script:out 6>&1
-        ($global:T7Llamadas | Where-Object { $_ -match '^functionapp deployment list-publishing-credentials' -and $_ -match 'appf' }).Count | Should -Be 1
-        ($global:T7Llamadas | Where-Object { $_ -match '^webapp deployment list-publishing-credentials' }).Count | Should -Be 2
+        Should -Invoke Invoke-WebRequest -Times 3 -Exactly -ParameterFilter {
+            $Uri -match '^https://(appf|appa|appr)\.scm\.azurewebsites\.net/api/zip/site/wwwroot/$' -and $Headers.Authorization -ceq 'Bearer TOKEN-SECRETO-987'
+        }
+        Should -Not -Invoke Invoke-WebRequest -ParameterFilter { $Headers.Authorization -like 'Basic*' }
+    }
+
+    It 'pide el token una sola vez y no lee credenciales de publicacion' {
+        $null = & $script:save -ResourceGroup rg1 -Apps $script:apps -OutDir $script:out 6>&1
+        Should -Invoke Get-ReleaseKuduToken -Times 1 -Exactly
+        ($global:T7Llamadas | Where-Object { $_ -match 'publishing-credentials' }).Count | Should -Be 0
     }
 
     It 'un zip vacio termina con exit 2 y no escribe foto-codigo.json' {
@@ -74,10 +83,11 @@ Describe 'Save-ReleaseFotoCodigo' {
         Test-Path (Join-Path $script:out 'foto-codigo.json') | Should -BeFalse
     }
 
-    It 'si falla az al leer las credenciales termina con exit 2' {
-        Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 1; $null }
+    It 'si no hay token termina con exit 2 sin descargar' {
+        Mock Get-ReleaseKuduToken { $null }
         $null = & $script:save -ResourceGroup rg1 -Apps $script:apps -OutDir $script:out 6>&1
         $LASTEXITCODE | Should -Be 2
+        Should -Not -Invoke Invoke-WebRequest
     }
 
     It 'si Kudu falla termina con exit 2' {
@@ -86,12 +96,11 @@ Describe 'Save-ReleaseFotoCodigo' {
         $LASTEXITCODE | Should -Be 2
     }
 
-    It 'la contrasena no aparece en la salida ni en ningun fichero y se marca como secreto' {
+    It 'el token no aparece en la salida ni en ningun fichero' {
         $salida = & $script:save -ResourceGroup rg1 -Apps $script:apps -OutDir $script:out 6>&1 | Out-String
-        $salida | Should -Match '##vso\[task.setsecret\]PWD-SECRETA-987'
-        ($salida -replace '##vso\[task.setsecret\]PWD-SECRETA-987', '') | Should -Not -Match 'PWD-SECRETA-987'
+        $salida | Should -Not -Match 'TOKEN-SECRETO-987'
         foreach ($f in Get-ChildItem $script:out -File -Filter *.json) {
-            (Get-Content $f.FullName -Raw) | Should -Not -Match 'PWD-SECRETA-987'
+            (Get-Content $f.FullName -Raw) | Should -Not -Match 'TOKEN-SECRETO-987'
         }
     }
 

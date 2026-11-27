@@ -104,7 +104,7 @@ Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variable
 | `Set-ReleaseIngesta.ps1` | Pausa o reactiva la ingesta (`AzureWebJobs.IngestDocument.Disabled`). |
 | `Wait-ReleaseTaskHubDrenado.ps1` | Espera a que el task hub no tenga instancias en curso (exit 3 al agotar el tiempo). |
 | `New-ReleaseFotoBd.ps1` / `Restore-ReleaseFotoBd.ps1` | Copia `<Tabla>__rel_<BuildId>` de las tablas de configuración y restauración por `MERGE`. |
-| `Save-ReleaseFotoCodigo.ps1` | Descarga por Kudu el código desplegado de las tres apps. |
+| `Save-ReleaseFotoCodigo.ps1` | Descarga por Kudu, con token de Entra (sin autenticación básica), el código desplegado de las tres apps. |
 | `Invoke-ReleasePasos.ps1` | Aplica los pasos del manifiesto (con ensayo previo) y los registra por hash. |
 | `Restart-ReleaseFunctionApp.ps1` | Reinicia la Function App y espera al health. |
 | `Invoke-ReleaseSmoke.ps1` | Smoke E2E con function key temporal y publicación en el Test Plan 100069. |

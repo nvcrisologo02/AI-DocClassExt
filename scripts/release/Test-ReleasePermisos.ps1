@@ -5,12 +5,13 @@
 .DESCRIPTION
     Ejecuta exactamente las lecturas de las tablas 3.1 a 3.3 de docs/procedimientos/PERMISOS_SPN_RELEASE.md
     (Key Vault, storage de documentos de destino y de origen de la copia, claves de la cuenta del task hub,
-    claves y estado de la Function App, credenciales de publicacion de las tres apps) mas dos
-    comprobaciones nuevas: Kudu alcanzable (GET https://<app>.scm.azurewebsites.net/api/ con las
-    credenciales de publicacion, las tres apps) y acceso SQL (SELECT 1).
+    claves y estado de la Function App) mas dos comprobaciones nuevas: Kudu alcanzable (GET
+    https://<app>.scm.azurewebsites.net/api/settings con Bearer del token de ARM de la cuenta
+    activa de az, las tres apps; la autenticacion basica de SCM esta deshabilitada y no se
+    reactiva, por eso ya no se leen credenciales de publicacion) y acceso SQL (SELECT 1).
 
-    Nunca imprime secretos: de las credenciales de publicacion solo se consulta el nombre de usuario;
-    la clave se usa unicamente para cabecera Basic de la peticion a Kudu.
+    Nunca imprime secretos: el token de Entra solo se usa en la cabecera Authorization de la peticion a
+    Kudu. Si Kudu falla escribe "Kudu <app>: HTTP <estado>" o "Kudu <app>: <mensaje>".
 
     Por cada lectura fallida escribe una linea "<recurso> - <rol que falta> - PERMISOS_SPN_RELEASE.md, apartado 3.x"
     (el 3.x es 3.1 dev, 3.2 pre y 3.3 prod). Codigo de salida 0 si todo pasa y 2 si falla alguna.
@@ -72,17 +73,27 @@ function Test-Lectura([string[]]$Arguments) {
     return ($LASTEXITCODE -eq 0)
 }
 
-function Test-KuduAlcanzable([string]$App, [string]$Grupo, [string]$Tipo) {
+$script:TokenKudu = $null
+
+function Test-KuduAlcanzable([string]$App) {
     $ErrorActionPreference = 'Continue'
-    $az = if ($Tipo -eq 'functionapp') { 'functionapp' } else { 'webapp' }
-    $cred = Invoke-ReleaseAz -Arguments @($az, 'deployment', 'list-publishing-credentials', '-n', $App, '-g', $Grupo, '--query', '{u:publishingUserName,p:publishingPassword}')
-    if ($LASTEXITCODE -ne 0 -or $null -eq $cred) { return $false }
-    $par = [Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes("$($cred.u):$($cred.p)"))
-    try {
-        $null = Invoke-WebRequest -UseBasicParsing -Method Get -TimeoutSec 30 -Uri "https://$App.scm.azurewebsites.net/api/" -Headers @{ Authorization = "Basic $par" }
-        return $true
+    if ($null -eq $script:TokenKudu) { $script:TokenKudu = Get-ReleaseKuduToken }
+    if ([string]::IsNullOrEmpty($script:TokenKudu)) {
+        Write-Host "Kudu ${App}: sin token de Entra"
+        return $false
     }
-    catch { return $false }
+    try {
+        $resp = Invoke-WebRequest -UseBasicParsing -Method Get -TimeoutSec 30 -SkipHttpErrorCheck -Uri "https://$App.scm.azurewebsites.net/api/settings" -Headers @{ Authorization = "Bearer $($script:TokenKudu)" }
+        if ([int]$resp.StatusCode -eq 200) { return $true }
+        Write-Host "Kudu ${App}: HTTP $([int]$resp.StatusCode)"
+        return $false
+    }
+    catch {
+        $m = [string]$_.Exception.Message
+        if ($m.Length -gt 200) { $m = $m.Substring(0, 200) }
+        Write-Host "Kudu ${App}: $m"
+        return $false
+    }
 }
 
 # 3.x: Key Vault.
@@ -100,26 +111,17 @@ foreach ($stg in @($r.stg, $r.origen) | Where-Object { $_ }) {
 if (-not (Test-Lectura @('storage', 'account', 'keys', 'list', '--account-name', $r.taskhub, '--query', '[0].keyName', '-o', 'tsv'))) {
     Add-Fallo $r.taskhub 'Contributor (listKeys) o Storage Table Data Reader' $sec
 }
-# Function App: claves, estado y credenciales de publicacion.
+# Function App: claves y estado.
 if (-not (Test-Lectura @('functionapp', 'keys', 'list', '-n', $r.func, '-g', $r.rg, '--query', 'length(functionKeys)'))) {
     Add-Fallo $r.func 'lectura de claves de funcion' $sec
 }
 if (-not (Test-Lectura @('functionapp', 'show', '-n', $r.func, '-g', $r.rg, '--query', 'state', '-o', 'tsv'))) {
     Add-Fallo $r.func 'lectura y reinicio de la Function App' $sec
 }
-if (-not (Test-Lectura @('functionapp', 'deployment', 'list-publishing-credentials', '-n', $r.func, '-g', $r.rg, '--query', 'publishingUserName', '-o', 'tsv'))) {
-    Add-Fallo $r.func 'credenciales de publicacion (Kudu)' $sec
-}
-# Admin y AssetResolver: credenciales de publicacion.
-foreach ($app in @($r.admin, $r.resolver)) {
-    if (-not (Test-Lectura @('webapp', 'deployment', 'list-publishing-credentials', '-n', $app, '-g', $r.rg, '--query', 'publishingUserName', '-o', 'tsv'))) {
-        Add-Fallo $app 'credenciales de publicacion (Kudu)' $sec
-    }
-}
-# Nuevas: Kudu alcanzable (las tres apps) y acceso SQL.
-foreach ($par in @(@($r.func, 'functionapp'), @($r.admin, 'webapp'), @($r.resolver, 'webapp'))) {
-    if (-not (Test-KuduAlcanzable -App $par[0] -Grupo $r.rg -Tipo $par[1])) {
-        Add-Fallo $par[0] 'Kudu alcanzable con las credenciales de publicacion' $sec
+# Nuevas: Kudu alcanzable con token de Entra (las tres apps) y acceso SQL.
+foreach ($par in @(@($r.func), @($r.admin), @($r.resolver))) {
+    if (-not (Test-KuduAlcanzable -App $par[0])) {
+        Add-Fallo $par[0] 'Kudu alcanzable con token de Entra (Contributor sobre el RG)' $sec
     }
 }
 try {

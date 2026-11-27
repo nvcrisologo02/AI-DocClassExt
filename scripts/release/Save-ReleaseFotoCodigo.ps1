@@ -3,11 +3,12 @@
     Foto del codigo desplegado de las tres apps (Functions, Admin, AssetResolver) por Kudu.
 
 .DESCRIPTION
-    Por cada app lee las credenciales de publicacion (secretos: se marcan con
-    ##vso[task.setsecret] y no se imprimen ni se guardan), descarga
+    Obtiene una vez el token de ARM de la cuenta activa de az (Get-ReleaseKuduToken, se marca como
+    secreto y no se imprime ni se guarda) y, por cada app, descarga con cabecera Bearer
     https://<app>.scm.azurewebsites.net/api/zip/site/wwwroot/ a <OutDir>/<clave>.zip, comprueba que
     el zip no esta vacio y tiene al menos una entrada, y escribe <OutDir>/foto-codigo.json con una
     entrada por app (app, zip, bytes, sha256). La vuelta atras redespliega esos zips.
+    La autenticacion basica de SCM esta deshabilitada y no se reactiva.
     Codigo de salida 0 si todo va bien y 2 si falla cualquier app o la escritura.
 
 .PARAMETER ResourceGroup
@@ -15,7 +16,7 @@
 
 .PARAMETER Apps
     Hashtable clave -> nombre de app: @{ functions = '...'; admin = '...'; assetresolver = '...' }.
-    La clave 'functions' usa az functionapp; el resto, az webapp.
+    Claves habituales: functions, admin, assetresolver (la clave solo da nombre al zip).
 
 .PARAMETER OutDir
     Carpeta de salida (se crea si no existe).
@@ -42,26 +43,19 @@ catch {
     exit 2
 }
 
+$token = Get-ReleaseKuduToken
+if ([string]::IsNullOrEmpty($token)) {
+    Write-Host 'No se pudo obtener el token de Entra para Kudu (az account get-access-token)'
+    exit 2
+}
+
 $foto = @()
 foreach ($clave in @($Apps.Keys | Sort-Object { if ($_ -eq 'functions') { 0 } elseif ($_ -eq 'admin') { 1 } else { 2 } })) {
     $app = [string]$Apps[$clave]
-    $tipo = if ($clave -eq 'functions') { 'functionapp' } else { 'webapp' }
-
-    $cred = Invoke-ReleaseAz -Arguments @($tipo, 'deployment', 'list-publishing-credentials', '-n', $app, '-g', $ResourceGroup, '--query', '{u:publishingUserName,p:publishingPassword}')
-    $codigo = $LASTEXITCODE
-    if ($codigo -ne 0 -or $null -eq $cred -or [string]::IsNullOrEmpty($cred.u) -or [string]::IsNullOrEmpty($cred.p)) {
-        Write-Host "No se pudieron leer las credenciales de publicacion de $app"
-        exit 2
-    }
-    $usuario = [string]$cred.u
-    $clavePub = [string]$cred.p
-    Write-Host "##vso[task.setsecret]$clavePub"
-    $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${usuario}:${clavePub}"))
-    Write-Host "##vso[task.setsecret]$basic"
 
     $zip = Join-Path $OutDir "$clave.zip"
     try {
-        Invoke-WebRequest -Uri "https://$app.scm.azurewebsites.net/api/zip/site/wwwroot/" -Headers @{ Authorization = "Basic $basic" } -OutFile $zip -ErrorAction Stop | Out-Null
+        Invoke-WebRequest -Uri "https://$app.scm.azurewebsites.net/api/zip/site/wwwroot/" -Headers @{ Authorization = "Bearer $token" } -OutFile $zip -ErrorAction Stop | Out-Null
     }
     catch {
         Write-Host "Kudu no devolvio el codigo de ${app}: $($_.Exception.Message)"

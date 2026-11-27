@@ -317,10 +317,44 @@ function Invoke-ReleaseAz {
     $salida = & az @args2 2>&1
     $script:UltimoExitCodeAz = $LASTEXITCODE
     $ErrorActionPreference = $prev
-    if ($script:UltimoExitCodeAz -ne 0) { return $null }
+    if ($script:UltimoExitCodeAz -ne 0) {
+        # Diagnostico: solo grupo y subcomando (tres primeros argumentos), nunca valores.
+        $prefijo = (@($Arguments | Select-Object -First 3) -join ' ')
+        $lineas = @($salida | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { ("$_" -split "`r?`n")[0] })
+        $msg = @($lineas | Where-Object { $_ -match 'ERROR' } | Select-Object -First 1)[0]
+        if ([string]::IsNullOrWhiteSpace($msg)) { $msg = @($lineas | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)[0] }
+        $msg = if ($null -eq $msg) { '' } else { ([string]$msg).Trim() }
+        if ($msg.Length -gt 300) { $msg = $msg.Substring(0, 300) }
+        Write-Host "az $prefijo fallo (codigo $($script:UltimoExitCodeAz)): $msg"
+        return $null
+    }
     $texto = (@($salida | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join "`n").Trim()
     if ([string]::IsNullOrWhiteSpace($texto)) { return $null }
     try { return ($texto | ConvertFrom-Json) } catch { return $texto }
+}
+
+function Get-ReleaseKuduToken {
+    <#
+    .SYNOPSIS
+        Token de ARM de la cuenta activa de az, para autenticar contra Kudu (scm) con Bearer.
+    .DESCRIPTION
+        La autenticacion basica de SCM esta deshabilitada y no se reactiva. Con TF_BUILD='True'
+        marca el token como secreto (##vso[task.setsecret]) antes de devolverlo. Devuelve $null
+        si az falla o la salida esta vacia. Nunca escribe el token salvo en el comando setsecret.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $salida = & az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
+    $codigo = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($codigo -ne 0) { return $null }
+    $token = (@($salida) -join '').Trim()
+    if ([string]::IsNullOrWhiteSpace($token)) { return $null }
+    if ($env:TF_BUILD -eq 'True') { Write-Host "##vso[task.setsecret]$token" }
+    return $token
 }
 
 function Get-ReleaseAzUltimoExitCode {
@@ -336,4 +370,4 @@ function Get-ReleaseAzUltimoExitCode {
 
 Export-ModuleMember -Function ConvertTo-ReleaseArgumentList, Get-ReleaseContentHash, New-EmbeddingsSql,
     Get-ReleaseBranchEsperada, ConvertTo-EnvironmentAlias, Get-DryRunSwitchName, Invoke-ReleaseSql,
-    Invoke-ReleaseSqlTransaccion, New-ReleaseRestoreSql, Invoke-ReleaseAz, Get-ReleaseAzUltimoExitCode
+    Invoke-ReleaseSqlTransaccion, New-ReleaseRestoreSql, Invoke-ReleaseAz, Get-ReleaseAzUltimoExitCode, Get-ReleaseKuduToken
