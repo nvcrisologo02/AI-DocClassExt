@@ -83,9 +83,30 @@ La identidad del build es el Project Collection Build Service del proyecto `AI D
 
 ## 4. Cómo se comprueba (stage `Guard`)
 
-Según la spec, `Guard` comprobaría cada permiso con una lectura, con la service connection del entorno, antes de abrir ninguna ventana y sin modificar nada; las lecturas de las tablas anteriores son la propuesta. Si falla una lectura, el run debe terminar en rojo con el recurso y el rol que faltan y esta página como referencia, y no se toca el entorno.
+`Guard` ejecuta `scripts/release/Test-ReleasePermisos.ps1` con la service connection del entorno, antes de abrir ninguna ventana y sin modificar nada. Solo hace lecturas y no imprime secretos: de las credenciales de publicación solo consulta el nombre de usuario. Si falla alguna lectura, el run termina en rojo (código de salida 2) con una línea por fallo, `<recurso> - <rol que falta> - PERMISOS_SPN_RELEASE.md, apartado 3.x`, y no se toca el entorno.
 
-Limitación conocida: una lectura no demuestra un permiso de escritura (borrar secretos, subir blobs, escribir en Test Plans). Esos se ejercitan antes en el modo de solo lectura de cada script (`-WhatIf` o `-DryRun`) y, la primera vez, en el ensayo en DEV.
+Lecturas definitivas, por entorno (las tablas del apartado 3 llevan los comandos de referencia):
+
+| Comprobación | Operación | Rol que cubre | dev | pre | prod |
+|---|---|---|---|---|---|
+| Key Vault del entorno | `az keyvault secret list` | Key Vault Secrets Officer | `srbkvdevdocai` | `srbkvpredocai` | `srbkvprodocai` |
+| Storage de documentos de destino | `az storage blob list` (contenedor `documentai`, `--auth-mode login`) | Storage Blob Data Reader/Contributor | `srbstgdevdocai` | `srbstgpredocai` | `srbstgprodocai` |
+| Storage de documentos de origen de la copia | `az storage blob list` (ídem) | Storage Blob Data Reader | no aplica | `srbstgdevdocai` | `srbstgpredocai` |
+| Storage del task hub | `az storage account keys list` | Contributor (`listKeys`) o Storage Table Data Reader | `srbstgdevappdocai` | `srbstgpreappdocai` | `srbstgproapppdocai` |
+| Function App: claves de función | `az functionapp keys list` | lectura de claves de función | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
+| Function App: estado | `az functionapp show` | lectura y reinicio de la Function App | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
+| Function App: credenciales de publicación | `az functionapp deployment list-publishing-credentials` | credenciales de publicación (Kudu) | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
+| Admin y AssetResolver: credenciales de publicación | `az webapp deployment list-publishing-credentials` | credenciales de publicación (Kudu) | `srbwebadmindevdocai`, `srbwebpluginassetresolverdev` | `srbwebadminpredocai`, `srbwebpluginassetresolverpre` | `srbwebadminprodocai`, `srbwebpluginassetresolver` |
+| Kudu alcanzable (las tres apps) | `GET https://<app>.scm.azurewebsites.net/api/` con Basic de las credenciales de publicación | credenciales de publicación y acceso de red a `scm` | las tres apps de dev | las tres apps de pre | las tres apps de prod |
+| Acceso SQL | `SELECT 1` en la base `DocumentIA` del servidor del entorno (`SQL_SERVER_NAME`) | `db_datareader` y `db_datawriter` (`grant-pipeline-sql-user.sql`) | `srbsqldevdocai` | `srbsqlpredocai` | `srbsqlprodocai` |
+
+Los grupos de recursos son `SRBRGDEVDOCSAI` (dev), `SRBRGPREDOCSAI` (pre) y `SRBRGDOCSAIPROD` (prod).
+
+Lo que `Guard` no comprueba:
+
+- Test Plans (apartado 3.4): el script no lee el plan 100069. La escritura se ejercita en el ensayo en DEV con `publish-smk-run.ps1`.
+- La service connection federada `AI DocClassExt Promocion IA`: no la usa `Guard`.
+- Permisos de escritura. Una lectura no demuestra borrar secretos, subir blobs ni escribir en Test Plans. Esos se ejercitan antes en el modo de solo lectura de cada script (`-WhatIf` o `-DryRun`) y, la primera vez, en el ensayo en DEV.
 
 ## 5. Si falta algún permiso
 
