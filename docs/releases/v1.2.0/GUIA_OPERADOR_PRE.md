@@ -150,7 +150,7 @@ Por qué este orden (para no «arreglarlo» sin querer):
 
 - **Quién:** operador lanza; aprobador aprueba el check 64.
 - **Dónde:** Azure DevOps, pipeline 832 `AI DocClassExt (AiArtifacts)` (`azure-pipelines-ai-artifacts.yml`).
-- **Parámetros:** `targetEnvironment=pre`, `fromProd=false`, `preGatesPassed=false`, `releaseTag=v1.2.0-pre-artefactos` (o `auto`), `runValidation=true`, `dryRun`, `applyMissingConfig=false`. Se lanza **dos veces**: primero con `dryRun=true`, después con `dryRun=false`.
+- **Parámetros:** `targetEnvironment=pre`, `fromProd=false`, `preGatesPassed=false`, `releaseTag=v1.2.0-pre-artefactos` (o `auto`), `runValidation=true`, `dryRun`, `applyMissingConfig=false`. Se lanza **dos veces**: primero con `dryRun=true`, después con `dryRun=false` (el pipeline sale con `targetEnvironment=dev` y `dryRun=true`: cambiar los dos a propósito).
 - **Resultado esperado:**
   - Con `dryRun=true`: en el log de `apply-deployments.ps1` aparece `create  gpt-5.6-luna  (...)` y los demás deployments `ok`; solo lee.
   - Con `dryRun=false`: una aprobación del check 64 (stage AiArtifacts); el log de `apply-deployments.ps1` muestra `created   gpt-5.6-luna  en N s` y en la tabla final `gpt-5.6-luna` en `Succeeded`; después `copy-cu-analyzers`, `copy-di-artifacts` y `validate-analyzer` sin `conflict` ni 401. El stage ConfigSeed publica el diff pero **no escribe**: sin `applyMissingConfig` el stage ConfigApply no existe, así que no hay segunda aprobación ni toca configuración.
@@ -164,7 +164,7 @@ Por qué este orden (para no «arreglarlo» sin querer):
 
 - **Quién:** operador lanza; aprobador aprueba el check 64 (cada job de despliegue sobre `pre`: Functions, Admin y AssetResolver, hasta tres aprobaciones).
 - **Dónde:** Azure DevOps, pipeline 799 `AI DocClassExt` (`azure-pipelines.yml`).
-- **Parámetros:** `targetEnvironment=pre` (el valor por defecto del pipeline es `prod`: cambiarlo antes de lanzar), rama `develop`. La ingesta de PRE debe seguir pausada (paso 2).
+- **Parámetros:** `targetEnvironment=pre` (el valor por defecto del pipeline es `dev`: cambiarlo antes de lanzar), rama `develop`. La ingesta de PRE debe seguir pausada (paso 2).
 - **Resultado esperado:** Build → DeployFunctions (jobs Functions y Admin) → DeployAssetResolver → ValidateConfiguration, los cuatro en verde; `RunMigrations` aparece omitido (deshabilitado a propósito). En el log del job Functions, el paso «Fijando settings decisivos (AB#101570)» termina con la línea `Settings decisivos verificados: PromptDefaults__ModelKey=prompt.gpt56-luna GDC__BypassSslValidation=false`. Leer esa línea en el log: es la comprobación de que los dos settings valen lo esperado. ValidateConfiguration confirma el contrato de app settings (`scripts/config/azure-appsettings-contract.json`).
 - **Avisos:**
   - A partir de aquí y hasta el paso 8, prompt y resumen fallan en cada llamada porque la fila `prompt.gpt56-luna` aún no existe. Es esperado; por eso la ingesta está pausada.

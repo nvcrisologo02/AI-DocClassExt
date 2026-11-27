@@ -2,9 +2,10 @@ trigger: none
 pr: none
 
 parameters:
+  # Por defecto dev: un run lanzado sin tocar parametros no despliega en PRE ni PRO (AB#101582).
   - name: targetEnvironment
     type: string
-    default: prod
+    default: dev
     values:
       - dev
       - pre

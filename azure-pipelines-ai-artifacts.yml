@@ -30,10 +30,12 @@ trigger: none
 pr: none
 
 parameters:
+  # Por defecto dev y dryRun: un run lanzado sin tocar parametros se para en Guard (dev sin
+  # fromProd no tiene salto) y, aun eligiendo destino, no escribe hasta desmarcar dryRun (AB#101582).
   - name: targetEnvironment
     displayName: Entorno destino
     type: string
-    default: pre
+    default: dev
     values:
       - dev
       - pre
@@ -57,7 +59,7 @@ parameters:
   - name: dryRun
     displayName: Ensayo sin escrituras (-DryRun en los scripts de scripts/ai; solo GET)
     type: boolean
-    default: false
+    default: true
   - name: applyMissingConfig
     displayName: Dar de alta en el destino la config que solo existe en el origen (por clave natural; con dryRun solo genera el SQL)
     type: boolean
