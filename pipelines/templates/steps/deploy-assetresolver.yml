@@ -1,0 +1,47 @@
+# Despliegue del AssetResolver y sus app settings. Procede de DeployAssetResolverJob de
+# azure-pipelines.yml (799); la pipeline Release lo reutilizara en el hito 2. Sin cambio de
+# comportamiento.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: assetResolverWebAppName
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: keyVaultName
+    type: string
+
+steps:
+- checkout: self
+
+- download: current
+  artifact: drop-assetresolver
+
+- task: AzureWebApp@1
+  displayName: Deploy AssetResolver Web App
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    appType: webApp
+    appName: ${{ parameters.assetResolverWebAppName }}
+    package: $(Pipeline.Workspace)/drop-assetresolver
+    deploymentMethod: zipDeploy
+
+- task: AzureCLI@2
+  displayName: Set AssetResolver App settings
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      $assetResolverSettings = @(
+        "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=user-ods-dwh)",
+        "ApiKey=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=AssetResolverApiKey)"
+      )
+
+      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+      $assetResolverSettingsJson = $assetResolverSettings | ConvertTo-Json -Compress -AsArray
+      & .\scripts\configuration\ensure-app-settings.ps1 `
+        -AppKind webapp `
+        -ResourceGroup "${{ parameters.resourceGroup }}" `
+        -Name "${{ parameters.assetResolverWebAppName }}" `
+        -SettingsJson $assetResolverSettingsJson

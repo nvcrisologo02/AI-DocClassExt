@@ -1,0 +1,96 @@
+# Despliegue del Admin, identidad con RBAC de Key Vault y app settings de la API de Functions.
+# Procede de DeployAdminJob de azure-pipelines.yml (799); la pipeline Release lo reutilizara en el
+# hito 2. Sin cambio de comportamiento.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: adminWebAppName
+    type: string
+  - name: functionAppName
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: keyVaultName
+    type: string
+  - name: manageKeyVaultRbac
+    type: string
+  - name: targetEnvironment
+    type: string
+
+steps:
+- checkout: self
+
+- download: current
+  artifact: drop-admin
+
+- task: AzureWebApp@1
+  displayName: Deploy Admin Web App
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    appType: webApp
+    appName: ${{ parameters.adminWebAppName }}
+    package: $(Pipeline.Workspace)/drop-admin
+    deploymentMethod: zipDeploy
+
+- task: AzureCLI@2
+  displayName: Ensure Admin Web App identity + Key Vault RBAC
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      $manageRbac = "${{ parameters.manageKeyVaultRbac }}" -eq 'true'
+
+      az webapp identity assign --resource-group "${{ parameters.resourceGroup }}" --name "${{ parameters.adminWebAppName }}" --only-show-errors --output none
+
+      $principalId = az webapp identity show --resource-group "${{ parameters.resourceGroup }}" --name "${{ parameters.adminWebAppName }}" --query principalId -o tsv
+
+      if (-not $principalId) {
+        throw "No se pudo resolver principalId para ${{ parameters.adminWebAppName }}."
+      }
+
+      $keyVaultScope = az keyvault show --resource-group "${{ parameters.resourceGroup }}" --name "${{ parameters.keyVaultName }}" --query id -o tsv
+
+      if (-not $keyVaultScope) {
+        throw "No se pudo resolver el recurso de Key Vault ${{ parameters.keyVaultName }}."
+      }
+
+      $existingRole = az role assignment list --scope $keyVaultScope --assignee $principalId --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" -o tsv
+
+      if ($existingRole -ne "0") {
+        Write-Host "[OK] ${{ parameters.adminWebAppName }} ya tiene 'Key Vault Secrets User' sobre ${{ parameters.keyVaultName }}."
+      }
+      elseif ($manageRbac) {
+        Write-Host "[INFO] manageKeyVaultRbac=true: intentando asignar 'Key Vault Secrets User'..."
+        az role assignment create --role "Key Vault Secrets User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $keyVaultScope --only-show-errors --output none
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "##vso[task.logissue type=error]El SP del service connection no puede crear role assignments sobre ${{ parameters.keyVaultName }}. Pre-asigna el rol con scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} (rol elevado/PIM) y vuelve a ejecutar con manageKeyVaultRbac=false."
+          exit 1
+        }
+        Write-Host "[OK] Asignado 'Key Vault Secrets User' a ${{ parameters.adminWebAppName }}."
+      }
+      else {
+        Write-Host "##vso[task.logissue type=error]PRERREQUISITO NO CUMPLIDO: la identidad $principalId de ${{ parameters.adminWebAppName }} no tiene 'Key Vault Secrets User' sobre ${{ parameters.keyVaultName }}."
+        Write-Host "##vso[task.logissue type=error]Asignalo una vez con: pwsh ./scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} (con rol elevado/PIM). Alternativa: re-ejecutar con la variable manageKeyVaultRbac=true si el SP tiene permiso de RBAC."
+        exit 1
+      }
+
+- task: AzureCLI@2
+  displayName: Set Admin App settings (Functions API)
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      $adminSettings = @(
+        "FunctionsAdminApi__BaseUrl=https://${{ parameters.functionAppName }}.azurewebsites.net/api/",
+        "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=FunctionsAdminApiFunctionKey)"
+      )
+
+      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+      $adminSettingsJson = $adminSettings | ConvertTo-Json -Compress -AsArray
+      & .\scripts\configuration\ensure-app-settings.ps1 `
+        -AppKind webapp `
+        -ResourceGroup "${{ parameters.resourceGroup }}" `
+        -Name "${{ parameters.adminWebAppName }}" `
+        -SettingsJson $adminSettingsJson

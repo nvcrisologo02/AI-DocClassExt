@@ -1,6 +1,6 @@
 # Migraciones de base de datos — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines-migrations.yml`, `DocumentIADbContextFactory` y `scripts/database/`). Estado del esquema: 38 migraciones, la última `20261013092225_ClaveIntencionDedup` (versión 1.24 en DATA_MODELS_ER_DIAGRAM.md).
+> Última revisión: 2026-11-26 (AB#101570, cifras del esquema con la migración `ReleaseAplicada`, que solo crea una tabla y viaja con el pipeline 807). Revisión previa: 2026-11-22 (AB#101447, contraste con `azure-pipelines-migrations.yml`, `DocumentIADbContextFactory` y `scripts/database/`). Estado del esquema: 39 migraciones, la última `20261126190743_ReleaseAplicada` (versión 1.25 en DATA_MODELS_ER_DIAGRAM.md).
 
 Guía de desarrollo para crear y probar migraciones de EF Core en local. La aplicación en DEV,
 PRE y PRO no se hace desde local ni desde los pipelines de aplicación: la hace el pipeline

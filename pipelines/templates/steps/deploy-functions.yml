@@ -1,0 +1,217 @@
+# Despliegue de la Function App y aplicacion de sus app settings (incluye el paso de settings
+# decisivos, AB#101570). Procede de DeployFunctionsJob de azure-pipelines.yml (799); la pipeline
+# Release lo reutilizara en el hito 2. Sin cambio de comportamiento. Los valores llegan como
+# parametros desde la plantilla de variables por entorno y las constantes del pipeline.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: functionAppName
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: keyVaultName
+    type: string
+  - name: assetResolverBaseUrl
+    type: string
+  - name: aiOpenaiPrimaryEndpoint
+    type: string
+  - name: aiCuPrimaryEndpoint
+    type: string
+  - name: aiCuSecondaryEndpoint
+    type: string
+  - name: aiDiEndpoint
+    type: string
+  - name: cuMaxConcurrentCalls
+    type: string
+  - name: cuHardTimeoutSeconds
+    type: string
+  - name: cuEnableCircuitBreaker
+    type: string
+  - name: cuCircuitBreakerFailureThreshold
+    type: string
+  - name: cuCircuitBreakerOpenSeconds
+    type: string
+  - name: cuMaxRetries
+    type: string
+  - name: cuInitialRetryDelayMs
+    type: string
+  - name: promptTracingEnabled
+    type: string
+  - name: promptTracingIncludePromptText
+    type: string
+  - name: promptTracingMaxPromptTextChars
+    type: string
+  - name: gdcEndpoint
+    type: string
+  - name: diUseInlineContent
+    type: string
+  - name: dedupModoEstricto
+    type: string
+  - name: promptDefaultsModelKey
+    type: string
+  - name: gcHeapHardLimitPercent
+    type: string
+  - name: blobRetentionCleanupCron
+    type: string
+  - name: blobRetentionDefaultDays
+    type: string
+  - name: blobRetentionBatchSize
+    type: string
+  - name: gdcTimeoutSeconds
+    type: string
+  - name: environmentName
+    type: string
+
+steps:
+- checkout: self
+
+- download: current
+  artifact: drop-functions
+
+- task: AzureFunctionApp@2
+  displayName: Deploy Function App
+  inputs:
+    connectedServiceNameARM: ${{ parameters.serviceConnection }}
+    appType: functionApp
+    appName: ${{ parameters.functionAppName }}
+    package: $(Pipeline.Workspace)/drop-functions
+    deploymentMethod: zipDeploy
+
+- task: AzureCLI@2
+  displayName: 'Set CU Resiliencia App Settings (post-deploy validation)'
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      Write-Host "Aplicando App Settings de resiliencia CU..."
+      
+      $settings = @(
+        "FUNCTIONS_WORKER_RUNTIME=dotnet-isolated",
+        "SecretsSource=AzureVault",
+        "KeyVaultName=${{ parameters.keyVaultName }}",
+        "RunDatabaseMigrationsOnStartup=false",
+        "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=AzureWebJobsStorage)",
+        "AzureStorageConnectionString=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=AzureStorageConnectionString)",
+        "SqlConnectionString=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=SqlConnectionString)",
+        "AssetResolver__BaseUrl=${{ parameters.assetResolverBaseUrl }}",
+        "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=AssetResolverApiKey)",
+        "AI__Resources__openai_primary__Endpoint=${{ parameters.aiOpenaiPrimaryEndpoint }}",
+        "AI__Resources__cu_primary__Endpoint=${{ parameters.aiCuPrimaryEndpoint }}",
+        "AI__Resources__cu_secondary__Endpoint=${{ parameters.aiCuSecondaryEndpoint }}",
+        "AI__Resources__di__Endpoint=${{ parameters.aiDiEndpoint }}",
+        "Extraction__DefaultProvider=azure-content-understanding",
+        "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=${{ parameters.cuMaxConcurrentCalls }}",
+        "Extraction__AzureContentUnderstanding__HardTimeoutSeconds=${{ parameters.cuHardTimeoutSeconds }}",
+        "Extraction__AzureContentUnderstanding__EnableCircuitBreaker=${{ parameters.cuEnableCircuitBreaker }}",
+        "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold=${{ parameters.cuCircuitBreakerFailureThreshold }}",
+        "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds=${{ parameters.cuCircuitBreakerOpenSeconds }}",
+        "Extraction__AzureContentUnderstanding__MaxRetries=${{ parameters.cuMaxRetries }}",
+        "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=${{ parameters.cuInitialRetryDelayMs }}",
+        "PromptTracing__Enabled=${{ parameters.promptTracingEnabled }}",
+        "PromptTracing__IncludePromptText=${{ parameters.promptTracingIncludePromptText }}",
+        "PromptTracing__MaxPromptTextChars=${{ parameters.promptTracingMaxPromptTextChars }}",
+        "Classification__DefaultProvider=azure-document-intelligence",
+        "GDC__Endpoint=${{ parameters.gdcEndpoint }}",
+        "DocumentIntelligence__UseInlineContent=${{ parameters.diUseInlineContent }}",
+        "Dedup__ModoEstricto=${{ parameters.dedupModoEstricto }}",
+        "PromptDefaults__ModelKey=${{ parameters.promptDefaultsModelKey }}",
+        "DOTNET_GCHeapHardLimitPercent=${{ parameters.gcHeapHardLimitPercent }}",
+        "BlobRetentionCleanupCron=${{ parameters.blobRetentionCleanupCron }}",
+        "BlobRetention__DefaultDays=${{ parameters.blobRetentionDefaultDays }}",
+        "BlobRetention__BatchSize=${{ parameters.blobRetentionBatchSize }}",
+        "GDC__TimeoutSeconds=${{ parameters.gdcTimeoutSeconds }}",
+        "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=GDC--HttpBasicUsername)",
+        "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=${{ parameters.keyVaultName }};SecretName=GDC--HttpBasicPassword)",
+        "GDC__ApplicationId=CKP1",
+        "GDC__NominalUser=",
+        "GDC__DocumentTypeId=document",
+        "GDC__ContentFieldName=Content",
+        "GDC__OrigenDocumento=8878",
+        "GDC__RepositoryId=",
+        "GDC__RepositoryName=",
+        "GDC__ClaseExpediente=AI04",
+        "GDC__DefaultMatricula=AI-99-SCXX-00",
+        "GDC__Servicer=9999",
+        "GDC__EntidadOrigen=9999",
+        "GDC__ProcesoCarga=PC01",
+        "GDC__TipoExpediente=AI",
+        "GDC__Publico=verdadero",
+        "GDC__BypassSslValidation=false",
+        "EnvironmentName=${{ parameters.environmentName }}"
+      )
+
+      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+      $settingsJson = $settings | ConvertTo-Json -Compress -AsArray
+      & .\scripts\configuration\ensure-app-settings.ps1 `
+        -AppKind functionapp `
+        -ResourceGroup "${{ parameters.resourceGroup }}" `
+        -Name "${{ parameters.functionAppName }}" `
+        -SettingsJson $settingsJson
+
+      Write-Host "Fijando settings decisivos (AB#101570)..."
+      az functionapp config appsettings set --resource-group "${{ parameters.resourceGroup }}" --name "${{ parameters.functionAppName }}" --settings "PromptDefaults__ModelKey=${{ parameters.promptDefaultsModelKey }}" "GDC__BypassSslValidation=false" -o none
+      if ($LASTEXITCODE -ne 0) { throw "No se pudieron fijar PromptDefaults__ModelKey y GDC__BypassSslValidation (az exit $LASTEXITCODE)." }
+      $decisivos = az functionapp config appsettings list --resource-group "${{ parameters.resourceGroup }}" --name "${{ parameters.functionAppName }}" --query "[?name=='PromptDefaults__ModelKey' || name=='GDC__BypassSslValidation'].[name,value]" -o tsv
+      if ($LASTEXITCODE -ne 0) { throw "No se pudieron leer los settings decisivos (az exit $LASTEXITCODE)." }
+      $esperados = @{ "PromptDefaults__ModelKey" = "${{ parameters.promptDefaultsModelKey }}"; "GDC__BypassSslValidation" = "false" }
+      $leidos = @{}
+      foreach ($fila in @($decisivos)) {
+        $partes = "$fila" -split "`t"
+        if ($partes.Count -ge 2) { $leidos[$partes[0].Trim()] = $partes[1].Trim() }
+      }
+      foreach ($clave in $esperados.Keys) {
+        if (-not $leidos.ContainsKey($clave) -or $leidos[$clave] -ne $esperados[$clave]) {
+          throw "El setting $clave vale ``$($leidos[$clave])`` y debia valer ``$($esperados[$clave])`` tras fijarlo."
+        }
+      }
+      Write-Host "Settings decisivos verificados: PromptDefaults__ModelKey=$($leidos['PromptDefaults__ModelKey']) GDC__BypassSslValidation=$($leidos['GDC__BypassSslValidation'])"
+
+      Write-Host "Retirando app settings heredados sin efecto (AB#101450)..."
+      & .\scripts\configuration\remove-legacy-app-settings.ps1 `
+        -ResourceGroup "${{ parameters.resourceGroup }}" `
+        -Name "${{ parameters.functionAppName }}"
+
+      Write-Host "Validando que todas las variables de resiliencia CU se han aplicado..."
+      
+      $requiredKeys = @(
+        "Extraction__AzureContentUnderstanding__MaxConcurrentCalls",
+        "Extraction__AzureContentUnderstanding__HardTimeoutSeconds",
+        "Extraction__AzureContentUnderstanding__EnableCircuitBreaker",
+        "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold",
+        "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds",
+        "Extraction__AzureContentUnderstanding__MaxRetries",
+        "Extraction__AzureContentUnderstanding__InitialRetryDelayMs",
+        "PromptTracing__Enabled",
+        "PromptTracing__IncludePromptText",
+        "PromptTracing__MaxPromptTextChars",
+        "Dedup__ModoEstricto",
+        "PromptDefaults__ModelKey",
+        "DOTNET_GCHeapHardLimitPercent",
+        "BlobRetentionCleanupCron",
+        "BlobRetention__DefaultDays",
+        "BlobRetention__BatchSize"
+      )
+      
+      $appliedSettings = az functionapp config appsettings list `
+        --resource-group "${{ parameters.resourceGroup }}" `
+        --name "${{ parameters.functionAppName }}" `
+        --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'Dedup__') || starts_with(name, 'PromptDefaults__') || starts_with(name, 'DOTNET_GC') || starts_with(name, 'BlobRetention')].{name: name, value: value}" `
+        -o json | ConvertFrom-Json
+      
+      $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
+      $missingKeys = @()
+      
+      foreach ($key in $requiredKeys) {
+        if ($key -notin $appliedNames) {
+          $missingKeys += $key
+        }
+      }
+      
+      if ($missingKeys.Count -gt 0) {
+        Write-Host "##vso[task.logissue type=error]Faltan variables requeridas: $($missingKeys -join ', ')"
+        exit 1
+      } else {
+        Write-Host "✓ Todas las variables de resiliencia CU están aplicadas correctamente"
+        $appliedSettings | ForEach-Object { Write-Host "  ✓ $($_.name) = $($_.value)" }
+      }

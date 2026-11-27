@@ -149,6 +149,10 @@ stages:
 
           - download: current
             artifact: FunctionsPublish
+          # zipDeploy, igual que el 799 (deploy-functions.yml): con el metodo por defecto (auto) este
+          # pipeline desplegaba con run-from-package y dejaba congelado el wwwroot del share; el
+          # siguiente 799 arrancaba unos segundos sobre ese codigo antiguo y su seed rellenaba los
+          # Endpoint vacios de ModeloConfigs con los de PRO (AB#101582).
           - task: AzureFunctionApp@1
             displayName: 'Deploy to Azure Function App'
             inputs:
@@ -156,6 +160,7 @@ stages:
               appType: 'functionApp'
               appName: '$(functionAppName)'
               package: '$(Pipeline.Workspace)/FunctionsPublish'
+              deploymentMethod: 'zipDeploy'
           - task: AzureCLI@2
             displayName: 'Set CU Resiliencia App Settings (post-deploy validation)'
             inputs:

@@ -1,0 +1,65 @@
+# Altas de config por clave natural en el destino: descarga de config-diff y db-config, copia
+# __bak, INSERT (nunca UPDATE ni DELETE), diff posterior sin altas pendientes y publicacion del
+# artefacto config-apply. Proceden de la pipeline 832 (azure-pipelines-ai-artifacts.yml), que
+# los compone hoy como deployment job Apply; la pipeline Release los reutilizara en el hito 2.
+# Incluyen el checkout y los download. Sin cambio de comportamiento.
+parameters:
+  - name: targetServiceConnection
+    type: string
+  - name: targetSqlServer
+    type: string
+  # Sin uso en estos pasos (el script no recibe -Database); se declara por el contrato del template.
+  - name: sqlDatabaseName
+    type: string
+  - name: targetEnvironment
+    type: string
+  - name: sourceEnvironment
+    type: string
+  - name: releaseTag
+    type: string
+
+steps:
+- checkout: self
+- download: current
+  artifact: config-diff
+- download: current
+  artifact: db-config
+- task: AzureCLI@2
+  displayName: apply-config-altas.ps1 y diff posterior
+  inputs:
+    azureSubscription: '${{ parameters.targetServiceConnection }}'
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      $tag = '${{ parameters.releaseTag }}'
+      if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
+      $target = '${{ parameters.targetEnvironment }}'
+      $out = "$(Build.ArtifactStagingDirectory)/config-apply"
+      New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+      pwsh -File ./scripts/ai/apply-config-altas.ps1 `
+        -Server "${{ parameters.targetSqlServer }}.database.windows.net" `
+        -SqlFile "$(Pipeline.Workspace)/config-diff/altas-config.sql" `
+        -BackupSuffix "configseed_build$(Build.BuildId)" | Tee-Object -FilePath "$out/aplicacion.txt"
+      if ($LASTEXITCODE -ne 0) { throw "apply-config-altas.ps1 termino con codigo $LASTEXITCODE" }
+
+      # Comprobacion: tras las altas no debe quedar ninguna pendiente.
+      pwsh -File ./scripts/ai/export-config-release.ps1 `
+        -SourceServer "${{ parameters.targetSqlServer }}.database.windows.net" `
+        -ReleaseTag "$tag-$target-despues" `
+        -OutDir "$(Agent.TempDirectory)/db-config-destino"
+      if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
+      $keys = @('ModeloConfigs=Key', 'PromptTemplates=PromptKey+Version', 'Tipologias=Codigo', 'CatalogoTdn1=Codigo', 'CatalogoTdn2=Codigo', 'PluginTipologiaConfigs=TipologiaCodigo')
+      python scripts/database/diff-config-exports.py `
+        "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-despues.sql" `
+        "$(Pipeline.Workspace)/db-config/config-$tag-${{ parameters.sourceEnvironment }}.sql" `
+        @keys --emit-inserts "$(Agent.TempDirectory)/altas-pendientes.sql" | Tee-Object -FilePath "$out/diff-config-despues.txt"
+      if ($LASTEXITCODE -ne 0) { throw "diff-config-exports.py termino con codigo $LASTEXITCODE" }
+      $pending = Select-String -LiteralPath "$out/diff-config-despues.txt" -Pattern '^== altas: (\d+)' | ForEach-Object { [int]$_.Matches[0].Groups[1].Value }
+      if ($pending -ne 0) { throw "Tras aplicar quedan $pending altas pendientes (ver diff-config-despues.txt)" }
+      Write-Host "Sin altas pendientes en $target."
+- task: PublishPipelineArtifact@1
+  condition: succeededOrFailed()
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/config-apply'
+    artifact: 'config-apply-$(System.JobAttempt)'

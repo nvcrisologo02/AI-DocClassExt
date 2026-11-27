@@ -1,6 +1,6 @@
 # 1. Arquitectura del Sistema — DocumentIA
 
-> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto; AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-22 (AB#101447, contraste con el código, las migraciones EF y los pipelines)  
+> Última revisión: 2026-11-26 (AB#101570, cifras de `DocumentIA.Data`: 14 entidades y 39 migraciones con `ReleaseAplicada`). Revisión previa: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto; AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-22 (AB#101447, contraste con el código, las migraciones EF y los pipelines)  
 > Actualización anterior: 2026-06-08 (Upgrade .NET 9→10 Isolated - Extended Support)  
 > Proyecto: AI DocClassExt — SAREB  
 > Repositorio: Azure DevOps `sareb.visualstudio.com/AI%20DocClassExt`
@@ -187,7 +187,7 @@ flowchart LR
 |----------|----------------|
 | **DocumentIA.Functions** | Triggers HTTP (`IngestDocument`, `healthcheck`, consulta de markdown por documento y por ejecución, tipologías publicadas y la Admin API `management/*`), timer de limpieza de blobs, Orchestrator Durable, **21 activities invocadas** (hay 22 declaradas: `ApplyPdfPageLimitActivity` existe pero el orquestador no la llama; el recorte de páginas para clasificar lo hace `PrepararDocumentoClasificacionActivity`), providers de IA (reglas, DI, embeddings, CU, GPT), servicios GDC y AssetResolver, autenticación |
 | **DocumentIA.Core** | Modelos de dominio (ContratoEntrada/Salida), motor de validacion (11 reglas), configuracion de tipologias, interfaces de servicio |
-| **DocumentIA.Data** | DbContext EF Core, 13 entidades, repositorios, 38 migraciones (la última `20261013092225_ClaveIntencionDedup`), seed data |
+| **DocumentIA.Data** | DbContext EF Core, 14 entidades, repositorios, 39 migraciones (la última `20261126190743_ReleaseAplicada`), seed data |
 | **DocumentIA.Plugins** | Infraestructura de plugins: IIntegrationPlugin, PluginFactory, PluginManager, ResilientPlugin, RestPlugin, SoapPlugin, CustomPlugin |
 | **DocumentIA.Tests.Unit** | 154 ficheros de test (xUnit + Moq + FluentAssertions; recuento del 2026-11-22). Hay además `DocumentIA.Tests.Admin`, `DocumentIA.Tests.E2E` (contra entornos desplegados) y `DocumentIA.AssetResolver.Tests` |
 | **DocumentIA.Desktop** | WPF MVVM: ingesta de documentos, polling de estado, visualización de timeline. Existe en `src/frontend/`, pero **no forma parte de `DocumentIA.sln` ni de los pipelines**; es una herramienta de desarrollo, no un cliente desplegado |
@@ -321,7 +321,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 > autenticacion esta en §1.4.6 y la IA es propia de cada entorno desde la Epic AB#100298. Su numeracion es local a
 > este documento y no coincide con la de los ADR formales de `docs/decisiones/` (`ADR-NNN-<slug>.md`), que son los
 > vigentes: cuando una referencia cita "ADR-001", "ADR-002" o "ADR-003" sin otro contexto, se refiere a
-> `docs/decisiones/` (ADR-001 a ADR-004 el 2026-11-22; ADR-005 y ADR-006 el 2026-11-26). En particular, el bloque ADR-005 de abajo describe un estado de autenticación
+> `docs/decisiones/` (ADR-001 a ADR-004 el 2026-11-22; ADR-005 a ADR-007 el 2026-11-26; ADR-008 el 2026-11-27). En particular, el bloque ADR-005 de abajo describe un estado de autenticación
 > superado (la identidad administrada está activa en los tres entornos, §1.4.6) y el ADR-006 habla de un SQL temporal que ya es
 > Azure SQL Database en los tres entornos.
 
@@ -589,7 +589,7 @@ Estado el 2026-11-22: **App Service Authentication (EasyAuth) activo en los tres
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Flujo pipeline, secuencias, modelo ER, contratos |
 | [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Infraestructura desplegada por entorno (DEV, PRE, PRO) |
 | [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md) | Modelo de datos, migraciones y versionado del esquema |
-| [decisiones/](decisiones/) | ADR formales vigentes (ADR-001 a ADR-006) |
+| [decisiones/](decisiones/) | ADR formales vigentes (ADR-001 a ADR-008) |
 | [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release y despliegue DEV → PRE → PRO |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |

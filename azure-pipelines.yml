@@ -2,91 +2,20 @@ trigger: none
 pr: none
 
 parameters:
+  # Por defecto dev: un run lanzado sin tocar parametros no despliega en PRE ni PRO (AB#101582).
   - name: targetEnvironment
     type: string
-    default: prod
+    default: dev
     values:
       - dev
       - pre
       - prod
 
 variables:
-  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
-    - name: AZURE_SERVICE_CONNECTION
-      value: AI DocClassExt DEV
-    - name: AZURE_FUNCTIONS_APP_NAME
-      value: srbappdevdocai
-    - name: ENVIRONMENT_NAME
-      value: Development
-    - name: AZURE_ADMIN_WEB_APP_NAME
-      value: srbwebadmindevdocai
-    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
-      value: srbwebpluginassetresolverdev
-    - name: AZURE_ASSET_RESOLVER_BASE_URL
-      value: https://srbwebpluginassetresolverdev.azurewebsites.net/
-    - name: AZURE_RESOURCE_GROUP
-      value: SRBRGDEVDOCSAI
-    - name: KEY_VAULT_NAME
-      value: srbkvdevdocai
-    - name: GDC_ENDPOINT
-      value: https://srbwidd03.sareb.srb:8090/sintws/IDocService
-    - name: DI_USE_INLINE_CONTENT
-      value: 'true'
-    - name: BLOB_RETENTION_BATCH_SIZE
-      value: '2000'
-    # promptDefaultsModelKey: modelo por defecto de las tipologias que no fijan ModelKey (PromptDefaults:ModelKey, AB#99938). Vacio no vale: la resolucion falla. Luna en los tres entornos desde v1.2.0 (ADR-004).
-    - name: PROMPT_DEFAULTS_MODEL_KEY
-      value: 'prompt.gpt56-luna'
-  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
-    - name: AZURE_SERVICE_CONNECTION
-      value: AI DocClassExt PRE
-    - name: AZURE_FUNCTIONS_APP_NAME
-      value: srbapppredocai
-    - name: ENVIRONMENT_NAME
-      value: Preproduction
-    - name: AZURE_ADMIN_WEB_APP_NAME
-      value: srbwebadminpredocai
-    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
-      value: srbwebpluginassetresolverpre
-    - name: AZURE_ASSET_RESOLVER_BASE_URL
-      value: https://srbwebpluginassetresolverpre.azurewebsites.net/
-    - name: AZURE_RESOURCE_GROUP
-      value: SRBRGPREDOCSAI
-    - name: KEY_VAULT_NAME
-      value: srbkvpredocai
-    - name: GDC_ENDPOINT
-      value: https://srbwidi03.sareb.srb:8090/sintws-162/IDocService  # GDC PRE confirmado en documentación operativa
-    - name: DI_USE_INLINE_CONTENT
-      value: 'true'
-    - name: BLOB_RETENTION_BATCH_SIZE
-      value: '2000'
-    - name: PROMPT_DEFAULTS_MODEL_KEY
-      value: 'prompt.gpt56-luna'
-  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
-    - name: AZURE_SERVICE_CONNECTION
-      value: AI DocClassExt PRO
-    - name: AZURE_FUNCTIONS_APP_NAME
-      value: srbappprodocai
-    - name: ENVIRONMENT_NAME
-      value: Production
-    - name: AZURE_ADMIN_WEB_APP_NAME
-      value: srbwebadminprodocai
-    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
-      value: srbwebpluginassetresolver
-    - name: AZURE_ASSET_RESOLVER_BASE_URL
-      value: https://srbwebpluginassetresolver.azurewebsites.net/
-    - name: AZURE_RESOURCE_GROUP
-      value: SRBRGDOCSAIPROD
-    - name: KEY_VAULT_NAME
-      value: srbkvprodocai
-    - name: GDC_ENDPOINT
-      value: https://srbwidp05.sareb.srb:8090/sintws/IDocService
-    - name: DI_USE_INLINE_CONTENT
-      value: 'false'
-    - name: BLOB_RETENTION_BATCH_SIZE
-      value: '5000'
-    - name: PROMPT_DEFAULTS_MODEL_KEY
-      value: 'prompt.gpt56-luna'
+  # Variables por entorno (conexion, recursos, endpoints y valores segun dev/pre/prod).
+  - template: pipelines/templates/variables/entorno.yml
+    parameters:
+      environment: ${{ parameters.targetEnvironment }}
   # Endpoints de IA por entorno (AI_*): fuente unica compartida con azure-pipelines-functions.yml.
   - template: infra/ai/pipeline-variables.yml
     parameters:
@@ -154,79 +83,15 @@ stages:
       - job: BuildJob
         displayName: Build solution
         steps:
-          - task: UseDotNet@2
-            displayName: Use .NET 10 SDK
-            inputs:
-              packageType: sdk
-              version: 10.x
-
-          - task: DotNetCoreCLI@2
-            displayName: Restore
-            inputs:
-              command: restore
-              projects: $(solutionPath)
-
-          - task: DotNetCoreCLI@2
-            displayName: Build
-            inputs:
-              command: build
-              projects: $(solutionPath)
-              arguments: --configuration $(buildConfiguration) --no-restore
-
-          - task: DotNetCoreCLI@2
-            displayName: Test
-            inputs:
-              command: test
-              projects: $(testsProject)
-              arguments: --configuration $(buildConfiguration) --no-build
-
-          - task: DotNetCoreCLI@2
-            displayName: Publish Functions
-            inputs:
-              command: publish
-              publishWebProjects: false
-              projects: $(functionsProject)
-              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/functions
-              zipAfterPublish: false
-              modifyOutputPath: false
-
-          - task: DotNetCoreCLI@2
-            displayName: Publish Admin
-            inputs:
-              command: publish
-              publishWebProjects: false
-              projects: $(adminProject)
-              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/admin
-              zipAfterPublish: false
-              modifyOutputPath: false
-
-          - task: DotNetCoreCLI@2
-            displayName: Publish AssetResolver
-            inputs:
-              command: publish
-              publishWebProjects: false
-              projects: $(assetResolverProject)
-              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/assetresolver
-              zipAfterPublish: false
-              modifyOutputPath: false
-
-          - task: PublishBuildArtifacts@1
-            displayName: Upload artifact - functions
-            inputs:
-              PathtoPublish: $(Build.ArtifactStagingDirectory)/functions
-              ArtifactName: drop-functions
-
-          - task: PublishBuildArtifacts@1
-            displayName: Upload artifact - admin
-            inputs:
-              PathtoPublish: $(Build.ArtifactStagingDirectory)/admin
-              ArtifactName: drop-admin
-
-          - task: PublishBuildArtifacts@1
-            displayName: Upload artifact - assetresolver
-            inputs:
-              PathtoPublish: $(Build.ArtifactStagingDirectory)/assetresolver
-              ArtifactName: drop-assetresolver
+          # Compila, prueba y publica los tres artefactos.
+          - template: pipelines/templates/steps/build-solucion.yml
+            parameters:
+              solutionPath: '$(solutionPath)'
+              buildConfiguration: '$(buildConfiguration)'
+              testsProject: '$(testsProject)'
+              functionsProject: '$(functionsProject)'
+              adminProject: '$(adminProject)'
+              assetResolverProject: '$(assetResolverProject)'
 
   - stage: RunMigrations
     displayName: Run Database Migrations
@@ -292,158 +157,38 @@ stages:
           runOnce:
             deploy:
               steps:
-                - checkout: self
-
-                - download: current
-                  artifact: drop-functions
-
-                - task: AzureFunctionApp@2
-                  displayName: Deploy Function App
-                  inputs:
-                    connectedServiceNameARM: $(AZURE_SERVICE_CONNECTION)
-                    appType: functionApp
-                    appName: $(AZURE_FUNCTIONS_APP_NAME)
-                    package: $(Pipeline.Workspace)/drop-functions
-                    deploymentMethod: zipDeploy
-
-                - task: AzureCLI@2
-                  displayName: 'Set CU Resiliencia App Settings (post-deploy validation)'
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    scriptType: 'pscore'
-                    scriptLocation: 'inlineScript'
-                    inlineScript: |
-                      Write-Host "Aplicando App Settings de resiliencia CU..."
-                      
-                      $settings = @(
-                        "FUNCTIONS_WORKER_RUNTIME=dotnet-isolated",
-                        "SecretsSource=AzureVault",
-                        "KeyVaultName=$(KEY_VAULT_NAME)",
-                        "RunDatabaseMigrationsOnStartup=false",
-                        "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)",
-                        "AzureStorageConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureStorageConnectionString)",
-                        "SqlConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=SqlConnectionString)",
-                        "AssetResolver__BaseUrl=$(AZURE_ASSET_RESOLVER_BASE_URL)",
-                        "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)",
-                        "AI__Resources__openai_primary__Endpoint=$(AI_OPENAI_PRIMARY_ENDPOINT)",
-                        "AI__Resources__cu_primary__Endpoint=$(AI_CU_PRIMARY_ENDPOINT)",
-                        "AI__Resources__cu_secondary__Endpoint=$(AI_CU_SECONDARY_ENDPOINT)",
-                        "AI__Resources__di__Endpoint=$(AI_DI_ENDPOINT)",
-                        "Extraction__DefaultProvider=azure-content-understanding",
-                        "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=$(cuMaxConcurrentCalls)",
-                        "Extraction__AzureContentUnderstanding__HardTimeoutSeconds=$(cuHardTimeoutSeconds)",
-                        "Extraction__AzureContentUnderstanding__EnableCircuitBreaker=$(cuEnableCircuitBreaker)",
-                        "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold=$(cuCircuitBreakerFailureThreshold)",
-                        "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds=$(cuCircuitBreakerOpenSeconds)",
-                        "Extraction__AzureContentUnderstanding__MaxRetries=$(cuMaxRetries)",
-                        "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=$(cuInitialRetryDelayMs)",
-                        "PromptTracing__Enabled=$(promptTracingEnabled)",
-                        "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
-                        "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)",
-                        "Classification__DefaultProvider=azure-document-intelligence",
-                        "GDC__Endpoint=$(GDC_ENDPOINT)",
-                        "DocumentIntelligence__UseInlineContent=$(DI_USE_INLINE_CONTENT)",
-                        "Dedup__ModoEstricto=$(dedupModoEstricto)",
-                        "PromptDefaults__ModelKey=$(PROMPT_DEFAULTS_MODEL_KEY)",
-                        "DOTNET_GCHeapHardLimitPercent=$(gcHeapHardLimitPercent)",
-                        "BlobRetentionCleanupCron=$(blobRetentionCleanupCron)",
-                        "BlobRetention__DefaultDays=$(blobRetentionDefaultDays)",
-                        "BlobRetention__BatchSize=$(BLOB_RETENTION_BATCH_SIZE)",
-                        "GDC__TimeoutSeconds=$(gdcTimeoutSeconds)",
-                        "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)",
-                        "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)",
-                        "GDC__ApplicationId=CKP1",
-                        "GDC__NominalUser=",
-                        "GDC__DocumentTypeId=document",
-                        "GDC__ContentFieldName=Content",
-                        "GDC__OrigenDocumento=8878",
-                        "GDC__RepositoryId=",
-                        "GDC__RepositoryName=",
-                        "GDC__ClaseExpediente=AI04",
-                        "GDC__DefaultMatricula=AI-99-SCXX-00",
-                        "GDC__Servicer=9999",
-                        "GDC__EntidadOrigen=9999",
-                        "GDC__ProcesoCarga=PC01",
-                        "GDC__TipoExpediente=AI",
-                        "GDC__Publico=verdadero",
-                        "GDC__BypassSslValidation=false",
-                        "EnvironmentName=$(ENVIRONMENT_NAME)"
-                      )
-
-                      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
-                      $settingsJson = $settings | ConvertTo-Json -Compress -AsArray
-                      & .\scripts\configuration\ensure-app-settings.ps1 `
-                        -AppKind functionapp `
-                        -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
-                        -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        -SettingsJson $settingsJson
-
-                      Write-Host "Fijando settings decisivos (AB#101570)..."
-                      az functionapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --settings "PromptDefaults__ModelKey=$(PROMPT_DEFAULTS_MODEL_KEY)" "GDC__BypassSslValidation=false" -o none
-                      if ($LASTEXITCODE -ne 0) { throw "No se pudieron fijar PromptDefaults__ModelKey y GDC__BypassSslValidation (az exit $LASTEXITCODE)." }
-                      $decisivos = az functionapp config appsettings list --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --query "[?name=='PromptDefaults__ModelKey' || name=='GDC__BypassSslValidation'].[name,value]" -o tsv
-                      if ($LASTEXITCODE -ne 0) { throw "No se pudieron leer los settings decisivos (az exit $LASTEXITCODE)." }
-                      $esperados = @{ "PromptDefaults__ModelKey" = "$(PROMPT_DEFAULTS_MODEL_KEY)"; "GDC__BypassSslValidation" = "false" }
-                      $leidos = @{}
-                      foreach ($fila in @($decisivos)) {
-                        $partes = "$fila" -split "`t"
-                        if ($partes.Count -ge 2) { $leidos[$partes[0].Trim()] = $partes[1].Trim() }
-                      }
-                      foreach ($clave in $esperados.Keys) {
-                        if (-not $leidos.ContainsKey($clave) -or $leidos[$clave] -ne $esperados[$clave]) {
-                          throw "El setting $clave vale ``$($leidos[$clave])`` y debia valer ``$($esperados[$clave])`` tras fijarlo."
-                        }
-                      }
-                      Write-Host "Settings decisivos verificados: PromptDefaults__ModelKey=$($leidos['PromptDefaults__ModelKey']) GDC__BypassSslValidation=$($leidos['GDC__BypassSslValidation'])"
-
-                      Write-Host "Retirando app settings heredados sin efecto (AB#101450)..."
-                      & .\scripts\configuration\remove-legacy-app-settings.ps1 `
-                        -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
-                        -Name "$(AZURE_FUNCTIONS_APP_NAME)"
-
-                      Write-Host "Validando que todas las variables de resiliencia CU se han aplicado..."
-                      
-                      $requiredKeys = @(
-                        "Extraction__AzureContentUnderstanding__MaxConcurrentCalls",
-                        "Extraction__AzureContentUnderstanding__HardTimeoutSeconds",
-                        "Extraction__AzureContentUnderstanding__EnableCircuitBreaker",
-                        "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold",
-                        "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds",
-                        "Extraction__AzureContentUnderstanding__MaxRetries",
-                        "Extraction__AzureContentUnderstanding__InitialRetryDelayMs",
-                        "PromptTracing__Enabled",
-                        "PromptTracing__IncludePromptText",
-                        "PromptTracing__MaxPromptTextChars",
-                        "Dedup__ModoEstricto",
-                        "PromptDefaults__ModelKey",
-                        "DOTNET_GCHeapHardLimitPercent",
-                        "BlobRetentionCleanupCron",
-                        "BlobRetention__DefaultDays",
-                        "BlobRetention__BatchSize"
-                      )
-                      
-                      $appliedSettings = az functionapp config appsettings list `
-                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
-                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'Dedup__') || starts_with(name, 'PromptDefaults__') || starts_with(name, 'DOTNET_GC') || starts_with(name, 'BlobRetention')].{name: name, value: value}" `
-                        -o json | ConvertFrom-Json
-                      
-                      $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
-                      $missingKeys = @()
-                      
-                      foreach ($key in $requiredKeys) {
-                        if ($key -notin $appliedNames) {
-                          $missingKeys += $key
-                        }
-                      }
-                      
-                      if ($missingKeys.Count -gt 0) {
-                        Write-Host "##vso[task.logissue type=error]Faltan variables requeridas: $($missingKeys -join ', ')"
-                        exit 1
-                      } else {
-                        Write-Host "✓ Todas las variables de resiliencia CU están aplicadas correctamente"
-                        $appliedSettings | ForEach-Object { Write-Host "  ✓ $($_.name) = $($_.value)" }
-                      }
+                # Despliega la Function App, aplica sus app settings y verifica los decisivos.
+                - template: pipelines/templates/steps/deploy-functions.yml
+                  parameters:
+                    serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+                    functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+                    resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+                    keyVaultName: '$(KEY_VAULT_NAME)'
+                    assetResolverBaseUrl: '$(AZURE_ASSET_RESOLVER_BASE_URL)'
+                    aiOpenaiPrimaryEndpoint: '$(AI_OPENAI_PRIMARY_ENDPOINT)'
+                    aiCuPrimaryEndpoint: '$(AI_CU_PRIMARY_ENDPOINT)'
+                    aiCuSecondaryEndpoint: '$(AI_CU_SECONDARY_ENDPOINT)'
+                    aiDiEndpoint: '$(AI_DI_ENDPOINT)'
+                    cuMaxConcurrentCalls: '$(cuMaxConcurrentCalls)'
+                    cuHardTimeoutSeconds: '$(cuHardTimeoutSeconds)'
+                    cuEnableCircuitBreaker: '$(cuEnableCircuitBreaker)'
+                    cuCircuitBreakerFailureThreshold: '$(cuCircuitBreakerFailureThreshold)'
+                    cuCircuitBreakerOpenSeconds: '$(cuCircuitBreakerOpenSeconds)'
+                    cuMaxRetries: '$(cuMaxRetries)'
+                    cuInitialRetryDelayMs: '$(cuInitialRetryDelayMs)'
+                    promptTracingEnabled: '$(promptTracingEnabled)'
+                    promptTracingIncludePromptText: '$(promptTracingIncludePromptText)'
+                    promptTracingMaxPromptTextChars: '$(promptTracingMaxPromptTextChars)'
+                    gdcEndpoint: '$(GDC_ENDPOINT)'
+                    diUseInlineContent: '$(DI_USE_INLINE_CONTENT)'
+                    dedupModoEstricto: '$(dedupModoEstricto)'
+                    promptDefaultsModelKey: '$(PROMPT_DEFAULTS_MODEL_KEY)'
+                    gcHeapHardLimitPercent: '$(gcHeapHardLimitPercent)'
+                    blobRetentionCleanupCron: '$(blobRetentionCleanupCron)'
+                    blobRetentionDefaultDays: '$(blobRetentionDefaultDays)'
+                    blobRetentionBatchSize: '$(BLOB_RETENTION_BATCH_SIZE)'
+                    gdcTimeoutSeconds: '$(gdcTimeoutSeconds)'
+                    environmentName: '$(ENVIRONMENT_NAME)'
       - deployment: DeployAdminJob
         displayName: Deploy to ${{ variables.AZURE_ADMIN_WEB_APP_NAME }}
         environment: ${{ parameters.targetEnvironment }}
@@ -451,82 +196,16 @@ stages:
           runOnce:
             deploy:
               steps:
-                - checkout: self
-
-                - download: current
-                  artifact: drop-admin
-
-                - task: AzureWebApp@1
-                  displayName: Deploy Admin Web App
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    appType: webApp
-                    appName: $(AZURE_ADMIN_WEB_APP_NAME)
-                    package: $(Pipeline.Workspace)/drop-admin
-                    deploymentMethod: zipDeploy
-
-                - task: AzureCLI@2
-                  displayName: Ensure Admin Web App identity + Key Vault RBAC
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    scriptType: pscore
-                    scriptLocation: inlineScript
-                    inlineScript: |
-                      $manageRbac = "$(manageKeyVaultRbac)" -eq 'true'
-
-                      az webapp identity assign --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --only-show-errors --output none
-
-                      $principalId = az webapp identity show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --query principalId -o tsv
-
-                      if (-not $principalId) {
-                        throw "No se pudo resolver principalId para $(AZURE_ADMIN_WEB_APP_NAME)."
-                      }
-
-                      $keyVaultScope = az keyvault show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(KEY_VAULT_NAME)" --query id -o tsv
-
-                      if (-not $keyVaultScope) {
-                        throw "No se pudo resolver el recurso de Key Vault $(KEY_VAULT_NAME)."
-                      }
-
-                      $existingRole = az role assignment list --scope $keyVaultScope --assignee $principalId --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" -o tsv
-
-                      if ($existingRole -ne "0") {
-                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) ya tiene 'Key Vault Secrets User' sobre $(KEY_VAULT_NAME)."
-                      }
-                      elseif ($manageRbac) {
-                        Write-Host "[INFO] manageKeyVaultRbac=true: intentando asignar 'Key Vault Secrets User'..."
-                        az role assignment create --role "Key Vault Secrets User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $keyVaultScope --only-show-errors --output none
-                        if ($LASTEXITCODE -ne 0) {
-                          Write-Host "##vso[task.logissue type=error]El SP del service connection no puede crear role assignments sobre $(KEY_VAULT_NAME). Pre-asigna el rol con scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} (rol elevado/PIM) y vuelve a ejecutar con manageKeyVaultRbac=false."
-                          exit 1
-                        }
-                        Write-Host "[OK] Asignado 'Key Vault Secrets User' a $(AZURE_ADMIN_WEB_APP_NAME)."
-                      }
-                      else {
-                        Write-Host "##vso[task.logissue type=error]PRERREQUISITO NO CUMPLIDO: la identidad $principalId de $(AZURE_ADMIN_WEB_APP_NAME) no tiene 'Key Vault Secrets User' sobre $(KEY_VAULT_NAME)."
-                        Write-Host "##vso[task.logissue type=error]Asignalo una vez con: pwsh ./scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} (con rol elevado/PIM). Alternativa: re-ejecutar con la variable manageKeyVaultRbac=true si el SP tiene permiso de RBAC."
-                        exit 1
-                      }
-
-                - task: AzureCLI@2
-                  displayName: Set Admin App settings (Functions API)
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    scriptType: pscore
-                    scriptLocation: inlineScript
-                    inlineScript: |
-                      $adminSettings = @(
-                        "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/",
-                        "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
-                      )
-
-                      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
-                      $adminSettingsJson = $adminSettings | ConvertTo-Json -Compress -AsArray
-                      & .\scripts\configuration\ensure-app-settings.ps1 `
-                        -AppKind webapp `
-                        -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
-                        -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                        -SettingsJson $adminSettingsJson
+                # Despliega el Admin, asegura identidad y RBAC de Key Vault y aplica sus app settings.
+                - template: pipelines/templates/steps/deploy-admin.yml
+                  parameters:
+                    serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+                    adminWebAppName: '$(AZURE_ADMIN_WEB_APP_NAME)'
+                    functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+                    resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+                    keyVaultName: '$(KEY_VAULT_NAME)'
+                    manageKeyVaultRbac: '$(manageKeyVaultRbac)'
+                    targetEnvironment: ${{ parameters.targetEnvironment }}
 
   - stage: DeployAssetResolver
     displayName: Deploy AssetResolver Plugin
@@ -540,39 +219,13 @@ stages:
           runOnce:
             deploy:
               steps:
-                - checkout: self
-
-                - download: current
-                  artifact: drop-assetresolver
-
-                - task: AzureWebApp@1
-                  displayName: Deploy AssetResolver Web App
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    appType: webApp
-                    appName: $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
-                    package: $(Pipeline.Workspace)/drop-assetresolver
-                    deploymentMethod: zipDeploy
-
-                - task: AzureCLI@2
-                  displayName: Set AssetResolver App settings
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    scriptType: pscore
-                    scriptLocation: inlineScript
-                    inlineScript: |
-                      $assetResolverSettings = @(
-                        "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=user-ods-dwh)",
-                        "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
-                      )
-
-                      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
-                      $assetResolverSettingsJson = $assetResolverSettings | ConvertTo-Json -Compress -AsArray
-                      & .\scripts\configuration\ensure-app-settings.ps1 `
-                        -AppKind webapp `
-                        -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
-                        -Name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
-                        -SettingsJson $assetResolverSettingsJson
+                # Despliega el AssetResolver y aplica sus app settings.
+                - template: pipelines/templates/steps/deploy-assetresolver.yml
+                  parameters:
+                    serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+                    assetResolverWebAppName: '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)'
+                    resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+                    keyVaultName: '$(KEY_VAULT_NAME)'
 
   - stage: ValidateConfiguration
     displayName: Validate Azure configuration contract
@@ -586,20 +239,11 @@ stages:
         pool:
           vmImage: windows-latest
         steps:
-          - checkout: self
-
-          - task: AzureCLI@2
-            displayName: Validate App Settings contract
-            inputs:
-              azureSubscription: $(AZURE_SERVICE_CONNECTION)
-              scriptType: pscore
-              scriptLocation: inlineScript
-              inlineScript: |
-                ./scripts/testing/validate-azure-appsettings-contract.ps1 `
-                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
-                  -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
-                  -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
-
-
-
+          # Valida el contrato de app settings de los tres recursos.
+          - template: pipelines/templates/steps/validate-configuration.yml
+            parameters:
+              serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+              resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+              functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+              adminWebAppName: '$(AZURE_ADMIN_WEB_APP_NAME)'
+              assetResolverWebAppName: '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)'

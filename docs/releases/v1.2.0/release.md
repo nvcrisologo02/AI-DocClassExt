@@ -19,7 +19,7 @@ Las tres listas de la Fase 0 del runbook (0.5 y 0.6).
 Orden de la ventana de PRE (decisión del usuario, 2026-11-26): 832 `pre` con `applyMissingConfig=false` → pausar ingesta → 799 → `aplicar-luna.ps1` → reinicio → copia de artefactos v5 → 07 → 832 con `applyMissingConfig`. Detalle en `GUIA_OPERADOR_PRE.md`.
 
 ### Migraciones y scripts fuera de EF
-- Migraciones EF: ninguna.
+- Migraciones EF: `20261126190743_ReleaseAplicada` (aditiva: solo crea la tabla `dbo.ReleaseAplicada` y su índice; no toca datos ni tablas existentes).
 - `scripts/migrations/gpt56-luna/aplicar-luna.ps1 -Environment pre` (scripts 01, 02, 05, 03, 09 y 08 de luna). Crea las 4 filas de luna de `ModeloConfigs`; no las crea el 832.
 - `scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql` (modo `hibrido`, artefacto v5).
 - `scripts/storage/copy-embeddings-artifacts.ps1 -Version v5 -TargetEnvironment pre`.

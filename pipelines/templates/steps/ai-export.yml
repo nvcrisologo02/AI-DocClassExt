@@ -1,0 +1,40 @@
+# Export de la config de BD del origen del salto (solo lectura) y publicacion del artefacto
+# db-config. Procede de la pipeline 832 (azure-pipelines-ai-artifacts.yml), que lo compone hoy
+# en el job Export; la pipeline Release lo reutilizara en el hito 2. Incluye el checkout.
+# Sin cambio de comportamiento.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: sqlServer
+    type: string
+  # Sin uso en estos pasos (el script no recibe -Database); se declara por el contrato del template.
+  - name: sqlDatabaseName
+    type: string
+  - name: sourceEnvironment
+    type: string
+  - name: releaseTag
+    type: string
+  - name: artifactName
+    type: string
+    default: db-config
+
+steps:
+- checkout: self
+- task: AzureCLI@2
+  displayName: export-config-release.ps1 contra el origen
+  inputs:
+    azureSubscription: '${{ parameters.serviceConnection }}'
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      $tag = '${{ parameters.releaseTag }}'
+      if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
+      pwsh -File ./scripts/ai/export-config-release.ps1 `
+        -SourceServer "${{ parameters.sqlServer }}.database.windows.net" `
+        -ReleaseTag "$tag-${{ parameters.sourceEnvironment }}" `
+        -OutDir "$(Build.ArtifactStagingDirectory)/db-config"
+      if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/db-config'
+    artifact: '${{ parameters.artifactName }}'
