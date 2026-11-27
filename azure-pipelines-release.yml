@@ -428,8 +428,11 @@ stages:
   condition: eq(dependencies.Foto.result, 'Failed')
   jobs:
   - job: FotoFallidaJob
-    displayName: Rehabilitar la ingesta y publicar el resumen
+    displayName: Rehabilitar la ingesta y publicar el resumen (agente alojado)
     timeoutInMinutes: 30
+    # Solo ARM (ingesta) y ficheros de artefactos: agente alojado.
+    pool:
+      vmImage: windows-latest
     variables:
       releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
       resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
@@ -571,9 +574,9 @@ stages:
         artifactName: 'ai-artifacts-${{ parameters.targetEnvironment }}-$(System.JobAttempt)'
 
 # ------------------------------------------------------------------------------------------------
-# 7. Codigo (799): Functions, settings, Admin y AssetResolver en un mismo job, en ese orden
-#    (functions-settings.yml no hace checkout y depende del de deploy-functions.yml), y despues
-#    ValidateConfiguration.
+# 7. Codigo (799): DeployFunctions (codigo y settings, en ese orden: functions-settings.yml no hace
+#    checkout y depende del de deploy-functions.yml), DeployAdmin y DeployAssetResolver, cada uno en su
+#    job, y despues ValidateConfiguration.
 # ------------------------------------------------------------------------------------------------
 - stage: Codigo
   displayName: Codigo
@@ -581,11 +584,13 @@ stages:
     - IA
     - Build
   jobs:
-  - job: Deploy
-    displayName: Deploy Functions, Admin y AssetResolver
+  # Un job por template, como en el 799: cada template trae su checkout: self y, con varios checkouts en un
+  # job, el repo queda en s/<nombre> y fallan las rutas relativas. Agente alojado: zipDeploy va por Kudu y
+  # desde el pool privado el scm no resuelve; todo es ARM o Kudu. Como en el 799, Functions y Admin van en
+  # paralelo y AssetResolver espera a Functions.
+  - job: DeployFunctions
+    displayName: Deploy Functions (codigo y settings)
     timeoutInMinutes: 60
-    # Agente alojado, como el 799: zipDeploy va por Kudu y desde el pool privado el scm no resuelve.
-    # Todo lo del job es ARM o Kudu (settings, identidad y RBAC de Key Vault), nada de SQL ni storage.
     pool:
       vmImage: windows-latest
     steps:
@@ -628,6 +633,12 @@ stages:
         blobRetentionBatchSize: '$(BLOB_RETENTION_BATCH_SIZE)'
         gdcTimeoutSeconds: '$(gdcTimeoutSeconds)'
         environmentName: '$(ENVIRONMENT_NAME)'
+  - job: DeployAdmin
+    displayName: Deploy Admin
+    timeoutInMinutes: 60
+    pool:
+      vmImage: windows-latest
+    steps:
     - template: pipelines/templates/steps/deploy-admin.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -637,6 +648,13 @@ stages:
         keyVaultName: '$(KEY_VAULT_NAME)'
         manageKeyVaultRbac: '$(manageKeyVaultRbac)'
         targetEnvironment: ${{ parameters.targetEnvironment }}
+  - job: DeployAssetResolver
+    displayName: Deploy AssetResolver
+    dependsOn: DeployFunctions
+    timeoutInMinutes: 60
+    pool:
+      vmImage: windows-latest
+    steps:
     - template: pipelines/templates/steps/deploy-assetresolver.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -645,7 +663,10 @@ stages:
         keyVaultName: '$(KEY_VAULT_NAME)'
   - job: Validate
     displayName: Validate Azure configuration contract
-    dependsOn: Deploy
+    dependsOn:
+      - DeployFunctions
+      - DeployAdmin
+      - DeployAssetResolver
     pool:
       vmImage: windows-latest
     steps:
@@ -1151,15 +1172,17 @@ stages:
     - template: pipelines/templates/steps/release-publicar-evidencias.yml
       parameters:
         stage: VueltaAtras
-  # El codigo solo se redespliega si la stage Codigo llego a ejecutarse. Los templates de despliegue
-  # no admiten condicion por paso, por eso es un job aparte con condicion de job.
-  - job: RevertirCodigo
-    displayName: Redesplegar el codigo de la foto
-    dependsOn: Restaurar
+  # El codigo solo se redespliega si su job de Codigo llego a ejecutarse (cada job de reversion mira el suyo).
+  # Los templates de despliegue no admiten condicion por paso, por eso son jobs aparte con condicion de job.
+  # Un job por template (cada uno trae su checkout: self), en agente alojado (zipDeploy va por Kudu y desde
+  # el pool privado el scm no resuelve). Los zips vienen del artefacto evidencias-FotoCodigo (FotoCodigoJob).
+  # Como en Codigo, AssetResolver espera a Functions; la condicion sin succeeded() lo deja correr aunque falle.
+  - job: RevertirFunctions
+    displayName: Redesplegar el codigo de la foto - Functions
+    dependsOn:
+      - Restaurar
     timeoutInMinutes: 60
-    condition: and(not(canceled()), ne(stageDependencies.Codigo.Deploy.result, 'Skipped'))
-    # Agente alojado: zipDeploy va por Kudu y desde el pool privado el scm no resuelve. Los zips vienen
-    # del artefacto evidencias-FotoCodigo (job FotoCodigoJob de la stage Foto).
+    condition: and(not(canceled()), ne(stageDependencies.Codigo.DeployFunctions.result, 'Skipped'))
     pool:
       vmImage: windows-latest
     steps:
@@ -1169,6 +1192,15 @@ stages:
         functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
         artifactName: evidencias-FotoCodigo
         packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/functions.zip'
+  - job: RevertirAdmin
+    displayName: Redesplegar el codigo de la foto - Admin
+    dependsOn:
+      - Restaurar
+    timeoutInMinutes: 60
+    condition: and(not(canceled()), ne(stageDependencies.Codigo.DeployAdmin.result, 'Skipped'))
+    pool:
+      vmImage: windows-latest
+    steps:
     - template: pipelines/templates/steps/deploy-admin.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -1180,6 +1212,16 @@ stages:
         targetEnvironment: ${{ parameters.targetEnvironment }}
         artifactName: evidencias-FotoCodigo
         packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/admin.zip'
+  - job: RevertirAssetResolver
+    displayName: Redesplegar el codigo de la foto - AssetResolver
+    dependsOn:
+      - Restaurar
+      - RevertirFunctions
+    timeoutInMinutes: 60
+    condition: and(not(canceled()), ne(stageDependencies.Codigo.DeployAssetResolver.result, 'Skipped'))
+    pool:
+      vmImage: windows-latest
+    steps:
     - template: pipelines/templates/steps/deploy-assetresolver.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -1192,7 +1234,9 @@ stages:
     displayName: Registro e ingesta
     dependsOn:
       - Restaurar
-      - RevertirCodigo
+      - RevertirFunctions
+      - RevertirAdmin
+      - RevertirAssetResolver
     condition: not(canceled())
     timeoutInMinutes: 30
     variables:
@@ -1201,7 +1245,9 @@ stages:
       resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
       resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
       resultadoRestaurar: $[ dependencies.Restaurar.result ]
-      resultadoRevertirCodigo: $[ dependencies.RevertirCodigo.result ]
+      resultadoRevertirFunctions: $[ dependencies.RevertirFunctions.result ]
+      resultadoRevertirAdmin: $[ dependencies.RevertirAdmin.result ]
+      resultadoRevertirAssetResolver: $[ dependencies.RevertirAssetResolver.result ]
       resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
       resultadoIA: $[ stageDependencies.IA.Promote.result ]
       resultadoCodigo: $[ stageDependencies.Codigo.Validate.result ]
@@ -1212,8 +1258,8 @@ stages:
     steps:
     - checkout: self
     - task: AzureCLI@2
-      displayName: Set-ReleaseRevertida (solo si la restauracion y el codigo se revirtieron)
-      condition: and(succeeded(), in(variables['resultadoRestaurar'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirCodigo'], 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      displayName: Set-ReleaseRevertida (solo si la restauracion y los tres despliegues de codigo se revirtieron)
+      condition: and(succeeded(), in(variables['resultadoRestaurar'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirFunctions'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirAdmin'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirAssetResolver'], 'Succeeded', 'SucceededWithIssues', 'Skipped'))
       inputs:
         azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
         scriptType: 'pscore'
@@ -1266,12 +1312,16 @@ stages:
     - template: pipelines/templates/steps/release-publicar-evidencias.yml
       parameters:
         stage: VueltaAtrasReinicio
-  # Resumen en rojo y cierre del run. No toca SQL ni HTTP; corre en el pool por defecto.
+  # Resumen en rojo y cierre del run. Solo ficheros de artefactos: agente alojado.
   - job: ResumenVuelta
-    displayName: Resumen y run en rojo
+    displayName: Resumen y run en rojo (agente alojado)
+    pool:
+      vmImage: windows-latest
     dependsOn:
       - Restaurar
-      - RevertirCodigo
+      - RevertirFunctions
+      - RevertirAdmin
+      - RevertirAssetResolver
       - Cierre
       - ReinicioVuelta
     condition: not(canceled())
@@ -1282,7 +1332,9 @@ stages:
       resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
       resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
       resultadoRestaurar: $[ dependencies.Restaurar.result ]
-      resultadoRevertirCodigo: $[ dependencies.RevertirCodigo.result ]
+      resultadoRevertirFunctions: $[ dependencies.RevertirFunctions.result ]
+      resultadoRevertirAdmin: $[ dependencies.RevertirAdmin.result ]
+      resultadoRevertirAssetResolver: $[ dependencies.RevertirAssetResolver.result ]
       resultadoCierre: $[ dependencies.Cierre.result ]
       resultadoReinicioVuelta: $[ dependencies.ReinicioVuelta.result ]
       resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
@@ -1363,7 +1415,9 @@ stages:
           [ordered]@{ nombre = 'Verificacion'; resultado = '$(resultadoVerificacion)' },
           [ordered]@{ nombre = 'Verificacion: Smoke'; resultado = '$(resultadoSmoke)' },
           [ordered]@{ nombre = 'VueltaAtras: Restaurar BD y settings'; resultado = '$(resultadoRestaurar)' },
-          [ordered]@{ nombre = 'VueltaAtras: Revertir codigo'; resultado = '$(resultadoRevertirCodigo)' },
+          [ordered]@{ nombre = 'VueltaAtras: Revertir Functions'; resultado = '$(resultadoRevertirFunctions)' },
+          [ordered]@{ nombre = 'VueltaAtras: Revertir Admin'; resultado = '$(resultadoRevertirAdmin)' },
+          [ordered]@{ nombre = 'VueltaAtras: Revertir AssetResolver'; resultado = '$(resultadoRevertirAssetResolver)' },
           [ordered]@{ nombre = 'VueltaAtras: Registro e ingesta'; resultado = '$(resultadoCierre)' },
           [ordered]@{ nombre = 'VueltaAtras: Reinicio'; resultado = '$(resultadoReinicioVuelta)' }
         )

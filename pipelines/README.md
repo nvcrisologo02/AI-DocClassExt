@@ -65,11 +65,41 @@ Los resultados de estas comparaciones van a `docs/auxiliares/temps/<fecha>/` (ca
 | `targetEnvironment` | `dev` (por defecto), `pre`, `prod` | `dev` es solo para ensayos. Origen del salto como en el 832: `pre` desde `dev`, `prod` desde `pre`; `dev` recupera desde PRO con `-FromProd -DryRun` y sin export ni altas. |
 | `simularFalloEn` | `ninguna` (por defecto, sin fallo; se pasa como vacío a Guard y a `simular-fallo.yml` porque Azure DevOps no admite la cadena vacía en `values`), `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas`, `Verificacion` | Solo en dev (Guard lo rechaza fuera de dev). Fuerza un fallo al inicio de esa stage (`simular-fallo.yml`) para ensayar la vuelta atrás. |
 
-Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variables/aprobadores.yml`, las constantes del 799 y del 832 y, por entorno, el origen del salto (`sourceEnvironment`, `sourceServiceConnection`, `sourceSqlServer`, `routeArgs`, `dryRunArg`). Pool por defecto `docia-mdp-private`; `Aprobacion` agentless; en `windows-latest` (agente alojado) van `Build/BuildJob`, `Guard/GuardKudu`, `Foto/FotoCodigoJob`, `Migraciones/Generate`, `Codigo/Deploy`, `Codigo/Validate`, `Configuracion/ReinicioJob`, `Altas/ReinicioJob`, `Verificacion/SmokeJob` y `VueltaAtras/RevertirCodigo` y `VueltaAtras/ReinicioVuelta`. Todo lo que habla con SQL, Key Vault o storage sigue en el pool privado. Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008).
+Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variables/aprobadores.yml`, las constantes del 799 y del 832 y, por entorno, el origen del salto (`sourceEnvironment`, `sourceServiceConnection`, `sourceSqlServer`, `routeArgs`, `dryRunArg`). Pool por defecto `docia-mdp-private`; `Aprobacion` agentless; los jobs en `windows-latest` (agente alojado) y la regla que decide el pool están en «Jobs y pool» más abajo. Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008).
 
 ### Qué corre en agente alojado y por qué
 
-El Kudu (`scm`) de la Function App no resuelve desde el pool privado `docia-mdp-private`: la app tiene endpoint privado y la zona DNS no está enlazada a la VNet del pool (NODATA). Desde un agente alojado resuelve a IP pública y Kudu con Bearer de Entra responde. Por eso todo lo que habla con Kudu va en `windows-latest`, como el 799: la comprobación de Kudu de Guard (`GuardKudu`), la foto del código (`FotoCodigoJob`) y los despliegues de código de `Codigo/Deploy` y `VueltaAtras/RevertirCodigo`. Lo mismo vale para el host principal: `<app>.azurewebsites.net` es un CNAME a `<app>.privatelink.azurewebsites.net` y tampoco resuelve desde el pool privado, así que todo job que hace HTTP a la Function App (reinicio con health: `Configuracion/ReinicioJob`, `Altas/ReinicioJob`, `VueltaAtras/ReinicioVuelta`; smoke: `Verificacion/SmokeJob`) va en hosted y se separa de los pasos de SQL, Key Vault y storage con `dependsOn`. SQL, Key Vault y storage siguen en el pool privado. Las llamadas a `az` con paréntesis u otros caracteres de `cmd` en argumentos sin espacios las prepara `ConvertTo-ReleaseAzArgumento` (en Windows, `az.cmd` rompe con `( ) & | < > ^`).
+El Kudu (`scm`) de la Function App no resuelve desde el pool privado `docia-mdp-private`: la app tiene endpoint privado y la zona DNS no está enlazada a la VNet del pool (NODATA). Desde un agente alojado resuelve a IP pública y Kudu con Bearer de Entra responde. Por eso todo lo que habla con Kudu va en `windows-latest`, como el 799: la comprobación de Kudu de Guard (`GuardKudu`), la foto del código (`FotoCodigoJob`) y los despliegues de código de `Codigo` (`DeployFunctions`, `DeployAdmin`, `DeployAssetResolver`) y de `VueltaAtras` (`RevertirFunctions`, `RevertirAdmin`, `RevertirAssetResolver`). Lo mismo vale para el host principal: `<app>.azurewebsites.net` es un CNAME a `<app>.privatelink.azurewebsites.net` y tampoco resuelve desde el pool privado, así que todo job que hace HTTP a la Function App (reinicio con health: `Configuracion/ReinicioJob`, `Altas/ReinicioJob`, `VueltaAtras/ReinicioVuelta`; smoke: `Verificacion/SmokeJob`) va en hosted y se separa de los pasos de SQL, Key Vault y storage con `dependsOn`. SQL, Key Vault y storage siguen en el pool privado. Las llamadas a `az` con paréntesis u otros caracteres de `cmd` en argumentos sin espacios las prepara `ConvertTo-ReleaseAzArgumento` (en Windows, `az.cmd` rompe con `( ) & | < > ^`).
+
+### Jobs y pool
+
+Regla: un job se queda en `docia-mdp-private` solo si hace SQL, Key Vault (plano de datos) o Storage (plano de datos, incluidas `storage entity query` y la copia de blobs). Los jobs que solo usan ARM (`az functionapp ...`, `az webapp ...`), la API de Azure DevOps, HTTP al host de la app, Kudu o ficheros de artefactos van en `windows-latest`, donde un job tarda segundos en tener agente (en el pool privado, unos 3 minutos). Un job que mezcla pasos de los dos tipos se queda en el pool; no se parte solo por esto.
+
+| Stage | Job | Pool | Motivo |
+|---|---|---|---|
+| `Guard` | `GuardJob` | privado | SQL (registro y permisos) |
+| `Guard` | `GuardKudu` | alojado | Kudu |
+| `Build` | `BuildJob` | alojado | build del 799 |
+| `Aprobacion` | `Aprobacion1`, `Aprobacion2` | agentless | `ManualValidation@1` |
+| `Foto` | `FotoJob` | privado | SQL (foto de la BD) y tablas del task hub |
+| `Foto` | `FotoCodigoJob` | alojado | Kudu |
+| `FotoFallida` | `FotoFallidaJob` | alojado | solo ARM (ingesta) y ficheros de artefactos |
+| `Migraciones` | `Generate` | alojado | 807 |
+| `Migraciones` | `Apply` | privado | SQL (807) |
+| `IA` | `Export`, `Promote` | privado | SQL, Key Vault y storage (832) |
+| `Codigo` | `DeployFunctions`, `DeployAdmin`, `DeployAssetResolver`, `Validate` | alojado | ARM y Kudu |
+| `Configuracion` | `ConfigJob` | privado | SQL, Key Vault y storage (lifecycle) |
+| `Configuracion` | `ReinicioJob` | alojado | HTTP al host de la app |
+| `Altas` | `Seed`, `Apply` | privado | SQL (config-seed y config-apply) |
+| `Altas` | `ReinicioJob` | alojado | HTTP al host de la app |
+| `Verificacion` | `VerifJob` | privado | SQL (export de la config) |
+| `Verificacion` | `SmokeJob` | alojado | HTTP y API de Azure DevOps |
+| `Fin` | `FinJob` | privado | SQL (registro de cierre) |
+| `VueltaAtras` | `Restaurar` | privado | SQL (restauración de la BD) |
+| `VueltaAtras` | `RevertirFunctions`, `RevertirAdmin`, `RevertirAssetResolver` | alojado | Kudu |
+| `VueltaAtras` | `Cierre` | privado | SQL (`Set-ReleaseRevertida`) |
+| `VueltaAtras` | `ReinicioVuelta` | alojado | HTTP al host de la app |
+| `VueltaAtras` | `ResumenVuelta` | alojado | solo ficheros de artefactos |
 
 ### Stages
 
@@ -79,15 +109,15 @@ El Kudu (`scm`) de la Function App no resuelve desde el pool privado `docia-mdp-
 | `Build` | Build y tests de la solución (template del 799); en paralelo a la espera de aprobación. |
 | `Aprobacion` | Dos `ManualValidation@1` encadenados (`Aprobacion1`, `Aprobacion2`), aprobadores de `aprobadores.yml`, 7 días de espera, rechazo al agotarse. En prod la segunda recuerda las cuatro puertas de PRE y el Smoke del Test Plan 100069. |
 | `Foto` | Foto de app settings, ingesta pausada, drenado del task hub (exit 3 = tiempo agotado: se rehabilita la ingesta y falla), copia de las tablas de configuración (`FotoJob`, pool privado) y, después, foto del código de las tres apps (`FotoCodigoJob`, agente alojado). Espera a `Aprobacion` y `Build`. |
-| `FotoFallida` | Solo si falla `Foto`: rehabilita la ingesta y publica el resumen en rojo. |
+| `FotoFallida` | Solo si falla `Foto`: rehabilita la ingesta y publica el resumen en rojo (`FotoFallidaJob`, agente alojado). |
 | `Migraciones` | `Generate` y `Apply` (templates del 807, sin backfill ni regla de firewall). |
 | `IA` | `Export` de la config del origen (no en dev) y `Promote` de artefactos de IA (templates del 832). |
-| `Codigo` | `Deploy` (Functions, settings, Admin y AssetResolver, en ese orden; agente alojado) y `Validate` (templates del 799). |
+| `Codigo` | Un job por template, como en el 799, todos en agente alojado: `DeployFunctions` (`deploy-functions.yml` y `functions-settings.yml`), `DeployAdmin` (en paralelo a Functions) y `DeployAssetResolver` (tras Functions); `Validate` depende de los tres. Con varios templates en un mismo job, cada `checkout: self` deja el repo en `s/<nombre>` y fallan las rutas relativas de los scripts. |
 | `Configuracion` | Pasos del manifiesto, secretos heredados de Key Vault y ciclo de vida del storage (cada uno con `-WhatIf` antes del real), reinicio con health en un job aparte (`ReinicioJob`, agente alojado). |
 | `Altas` | Solo pre y prod: `config-seed` y `config-apply` con `applyMissingConfig`; reinicio con health en `ReinicioJob` (agente alojado). |
 | `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con function key temporal y publicación en el Test Plan 100069 (el smoke va en `SmokeJob`, agente alojado, tras `VerifJob`). |
 | `Fin` | Solo con todo en verde: ingesta activa, cierre en `ReleaseAplicada`, `resumen.md` y artefacto `release-<env>-<build>`. |
-| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto si `Codigo` llegó a empezar (`RevertirCodigo`, agente alojado, desde `evidencias-FotoCodigo`), marca el registro como `Revertido`, rehabilita la ingesta (`Cierre`), reinicia (`ReinicioVuelta`, agente alojado), publica el resumen en rojo y deja el run en rojo (`ResumenVuelta`). |
+| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto desde `evidencias-FotoCodigo`, un job por app y solo si su job de `Codigo` no fue `Skipped` (`RevertirFunctions`, `RevertirAdmin` y `RevertirAssetResolver`, agente alojado), marca el registro como `Revertido`, rehabilita la ingesta (`Cierre`, que marca `Revertido` solo si `Restaurar` y los tres jobs de reversión acaban en `Succeeded`, `SucceededWithIssues` o `Skipped`), reinicia (`ReinicioVuelta`, agente alojado), publica el resumen en rojo, con los tres redespliegues por separado, y deja el run en rojo (`ResumenVuelta`, agente alojado). |
 
 `simularFalloEn` coloca `simular-fallo.yml` como primer paso de `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas` y `Verificacion`.
 
