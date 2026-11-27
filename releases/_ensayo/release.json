@@ -5,6 +5,12 @@
       "tipo": "sql",
       "ruta": "releases/_ensayo/ensayo-dev.sql",
       "entornos": ["dev"]
+    },
+    {
+      "tipo": "ps1",
+      "ruta": "releases/_ensayo/ensayo-dev.ps1",
+      "argumentos": "-Environment <env>",
+      "entornos": ["dev"]
     }
   ]
 }
