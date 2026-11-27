@@ -6,7 +6,9 @@
     Lee la clave de la cuenta de storage del task hub (secreto: se marca con ##vso[task.setsecret] y no
     se imprime en ningun otro sitio) y consulta la tabla <TaskHub>Instances hasta que no quedan filas con
     RuntimeStatus Running o Pending. Cualquier fallo de lectura (clave o tabla, tambien en iteraciones
-    posteriores) termina con exit 2; el tiempo agotado es exit 3.
+    posteriores, o una respuesta sin items) termina con exit 2; el tiempo agotado es exit 3.
+    Una pagina sin items pero con nextMarker (nextpartitionkey no vacio) NO es drenado: se sigue con --marker
+    hasta ver filas o agotar el marcador (tope 50 paginas por consulta, luego exit 2).
     Codigos de salida: 0 drenado, 2 no se pudo leer clave o tabla, 3 tiempo agotado.
 
 .PARAMETER StorageAccount
@@ -47,24 +49,55 @@ $tabla = "$($TaskHub)Instances"
 $inicio = [DateTime]::UtcNow
 $limite = $inicio.AddMinutes($TimeoutMinutos)
 
+$filtro = "RuntimeStatus eq 'Running' or RuntimeStatus eq 'Pending'"
+$maxPaginas = 50
+
 while ($true) {
-    $res = Invoke-ReleaseAz -Arguments @('storage', 'entity', 'query', '--table-name', $tabla, '--account-name', $StorageAccount, '--account-key', $clave, '--auth-mode', 'key', '--filter', "RuntimeStatus eq 'Running' or RuntimeStatus eq 'Pending'", '--select', 'RuntimeStatus')
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "No se pudo leer la tabla $tabla"
-        exit 2
+    # Una pagina con 0 filas y nextMarker pendiente NO es drenado: se sigue hasta ver filas o agotar el marcador.
+    $cantidad = 0
+    $marcador = @()
+    $paginas = 0
+    while ($true) {
+        $res = Invoke-ReleaseAz -Arguments (@('storage', 'entity', 'query', '--table-name', $tabla, '--account-name', $StorageAccount, '--account-key', $clave, '--auth-mode', 'key', '--filter', $filtro, '--select', 'RuntimeStatus') + $marcador)
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "No se pudo leer la tabla $tabla"
+            exit 2
+        }
+        # Una tabla vacia devuelve {"items":[]}: sin objeto o sin items es una anomalia, no un task hub drenado.
+        if ($null -eq $res -or $res -is [string] -or $null -eq $res.PSObject.Properties['items']) {
+            Write-Host "Respuesta inesperada de la tabla $tabla"
+            exit 2
+        }
+        $cantidad += @($res.items | Where-Object { $null -ne $_ }).Count
+        if ($cantidad -gt 0) { break }
+
+        $pk = ''
+        $rk = ''
+        $nm = if ($null -ne $res.PSObject.Properties['nextMarker']) { $res.nextMarker } else { $null }
+        if ($null -ne $nm -and $nm -isnot [string]) {
+            if ($null -ne $nm.PSObject.Properties['nextpartitionkey']) { $pk = [string]$nm.nextpartitionkey }
+            if ($null -ne $nm.PSObject.Properties['nextrowkey']) { $rk = [string]$nm.nextrowkey }
+        }
+        if ([string]::IsNullOrEmpty($pk)) { break }
+
+        $paginas++
+        if ($paginas -ge $maxPaginas) {
+            Write-Host "Respuesta inesperada de la tabla $tabla"
+            exit 2
+        }
+        $marcador = @('--marker', "nextpartitionkey=$pk", "nextrowkey=$rk")
     }
-    $items = if ($null -ne $res -and $null -ne $res.PSObject.Properties['items']) { @($res.items | Where-Object { $null -ne $_ }) } else { @() }
     $transcurrido = [int][Math]::Round(([DateTime]::UtcNow - $inicio).TotalSeconds)
 
-    if ($items.Count -eq 0) {
+    if ($cantidad -eq 0) {
         Write-Host "Task hub drenado tras $transcurrido segundos"
         exit 0
     }
-    Write-Host "Quedan $($items.Count) instancias (Running/Pending)"
+    Write-Host "Quedan $cantidad instancias (Running/Pending)"
 
     if ([DateTime]::UtcNow -ge $limite) {
         $minutos = [Math]::Round(([DateTime]::UtcNow - $inicio).TotalMinutes, 2)
-        Write-Host "Tiempo agotado: quedan $($items.Count) instancias tras $minutos minutos"
+        Write-Host "Tiempo agotado: quedan $cantidad instancias tras $minutos minutos"
         exit 3
     }
     Start-Sleep -Seconds $IntervaloSegundos

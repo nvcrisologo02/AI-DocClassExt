@@ -49,14 +49,76 @@ Describe 'Wait-ReleaseTaskHubDrenado' {
         $q | Should -Contain "RuntimeStatus eq 'Running' or RuntimeStatus eq 'Pending'"
     }
 
-    It 'exit 0 si la consulta no trae la propiedad items' {
+    It 'exit 2 con Respuesta inesperada si la consulta devuelve null, texto o un objeto sin items' {
+        foreach ($raro in @($null, 'texto', [pscustomobject]@{ otra = 1 })) {
+            $global:T4Raro = $raro
+            Mock Invoke-ReleaseAz {
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains 'keys') { return $global:T4Clave }
+                $global:T4Raro
+            }
+            $out = & $script:espera -StorageAccount stg1 -IntervaloSegundos 0 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 2
+            $out | Should -Match 'Respuesta inesperada de la tabla DocumentIAHubInstances'
+            $out | Should -Not -Match 'drenado tras'
+        }
+    }
+
+    It 'una pagina vacia con nextMarker no es drenado: sigue con --marker y ve las filas (exit 3)' {
         Mock Invoke-ReleaseAz {
+            $global:T4Llamadas += , @($Arguments)
             $global:LASTEXITCODE = 0
             if ($Arguments -contains 'keys') { return $global:T4Clave }
-            $null
+            if ($Arguments -contains '--marker') {
+                [pscustomobject]@{ items = @([pscustomobject]@{ RuntimeStatus = 'Running' }); nextMarker = [pscustomobject]@{} }
+            }
+            else {
+                [pscustomobject]@{ items = @(); nextMarker = [pscustomobject]@{ nextpartitionkey = 'p'; nextrowkey = 'r' } }
+            }
+        }
+        $out = & $script:espera -StorageAccount stg1 -TimeoutMinutos 0.01 -IntervaloSegundos 0 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 3
+        $out | Should -Not -Match 'drenado tras'
+        $m = $global:T4Llamadas | Where-Object { $_ -contains '--marker' } | Select-Object -First 1
+        $m | Should -Not -BeNullOrEmpty
+        $m | Should -Contain 'nextpartitionkey=p'
+        $m | Should -Contain 'nextrowkey=r'
+    }
+
+    It 'marcador con nextrowkey nulo: sigue con nextrowkey= vacio' {
+        Mock Invoke-ReleaseAz {
+            $global:T4Llamadas += , @($Arguments)
+            $global:LASTEXITCODE = 0
+            if ($Arguments -contains 'keys') { return $global:T4Clave }
+            if ($Arguments -contains '--marker') { [pscustomobject]@{ items = @(); nextMarker = [pscustomobject]@{} } }
+            else { [pscustomobject]@{ items = @(); nextMarker = [pscustomobject]@{ nextpartitionkey = 'p'; nextrowkey = $null } } }
         }
         $null = & $script:espera -StorageAccount stg1 -IntervaloSegundos 0 6>&1
         $LASTEXITCODE | Should -Be 0
+        $m = $global:T4Llamadas | Where-Object { $_ -contains '--marker' } | Select-Object -First 1
+        $m | Should -Contain 'nextrowkey='
+    }
+
+    It 'pagina vacia con nextMarker y siguiente pagina vacia sin marcador: drenado (exit 0)' {
+        Mock Invoke-ReleaseAz {
+            $global:LASTEXITCODE = 0
+            if ($Arguments -contains 'keys') { return $global:T4Clave }
+            if ($Arguments -contains '--marker') { [pscustomobject]@{ items = @(); nextMarker = [pscustomobject]@{} } }
+            else { [pscustomobject]@{ items = @(); nextMarker = [pscustomobject]@{ nextpartitionkey = 'p'; nextrowkey = 'r' } } }
+        }
+        $null = & $script:espera -StorageAccount stg1 -IntervaloSegundos 0 6>&1
+        $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'exit 2 si las paginas vacias con marcador superan el tope' {
+        Mock Invoke-ReleaseAz {
+            $global:LASTEXITCODE = 0
+            if ($Arguments -contains 'keys') { return $global:T4Clave }
+            [pscustomobject]@{ items = @(); nextMarker = [pscustomobject]@{ nextpartitionkey = 'p'; nextrowkey = 'r' } }
+        }
+        $out = & $script:espera -StorageAccount stg1 -IntervaloSegundos 0 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        $out | Should -Match 'Respuesta inesperada'
     }
 
     It 'termina con exit 3 e informa de las que quedan al agotar el tiempo' {
