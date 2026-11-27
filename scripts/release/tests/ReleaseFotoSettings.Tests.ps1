@@ -76,6 +76,35 @@ Describe 'Save-ReleaseFotoSettings' {
         }
     }
 
+    It 'una clave AI__Resources__x__Key no entra en foto-settings.json' {
+        $global:T6Lista = @($global:T6Lista) + (New-T6Lista @{ 'AI__Resources__x__Key' = 'clave-secreta' })
+        Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 0; $global:T6Lista }
+        $null = & $script:save -ResourceGroup rg1 -FunctionApp app1 -OutDir $script:out 6>&1
+        $LASTEXITCODE | Should -Be 0
+        $foto = Get-Content (Join-Path $script:out 'foto-settings.json') -Raw
+        $foto | Should -Not -Match 'AI__Resources__x__Key'
+        $foto | Should -Not -Match 'clave-secreta'
+    }
+
+    It 'sin claves Endpoint escribe appsettings-ia-antes.txt vacio' {
+        $global:T6Lista = New-T6Lista @{ 'OtraCosa' = 'v'; 'GDC__Endpoint' = 'https://gdc.example/' }
+        Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 0; $global:T6Lista }
+        $null = & $script:save -ResourceGroup rg1 -FunctionApp app1 -OutDir $script:out 6>&1
+        $LASTEXITCODE | Should -Be 0
+        (Get-Item (Join-Path $script:out 'appsettings-ia-antes.txt')).Length | Should -Be 0
+    }
+
+    It 'un OutDir que no se puede crear termina con exit 2 sin anunciar la foto' {
+        $fichero = Join-Path $script:out 'es-un-fichero'
+        New-Item -ItemType Directory -Path $script:out | Out-Null
+        [IO.File]::WriteAllText($fichero, 'x')
+        Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 0; $global:T6Lista }
+        $salida = & $script:save -ResourceGroup rg1 -FunctionApp app1 -OutDir (Join-Path $fichero 'sub') 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        $salida | Should -Not -Match 'Foto de'
+        Test-Path (Join-Path $fichero 'sub' 'foto-settings.json') | Should -BeFalse
+    }
+
     It 'un fallo de az termina con exit 2' {
         Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 1; $null }
         $null = & $script:save -ResourceGroup rg1 -FunctionApp app1 -OutDir $script:out 6>&1
@@ -115,6 +144,13 @@ Describe 'Restore-ReleaseFotoSettings' {
         $set[0] | Should -Contain 'GDC__BypassSslValidation=false'
         ($set[0] -join ' ') | Should -Not -Match 'AzureWebJobs.IngestDocument.Disabled'
         @($global:T6Llamadas | Where-Object { $_ -contains 'delete' }).Count | Should -Be 0
+    }
+
+    It 'un fallo de az en set termina con exit 2' {
+        [IO.File]::WriteAllText($script:foto, '{"PromptDefaults__ModelKey":"prompt.x"}')
+        Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 1; $null }
+        $null = & $script:restore -ResourceGroup rg1 -FunctionApp app1 -InFile $script:foto 6>&1
+        $LASTEXITCODE | Should -Be 2
     }
 
     It 'una clave con null se borra con delete' {

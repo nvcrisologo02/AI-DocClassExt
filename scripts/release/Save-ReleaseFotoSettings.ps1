@@ -55,18 +55,35 @@ foreach ($s in $lista) {
 }
 
 $lineasIa = @($lista | Where-Object { $_.name -match '__Endpoint$' -and $_.name -ne 'GDC__Endpoint' } |
-        Sort-Object -Property name -CaseSensitive:$false |
+        Sort-Object -Property @{ Expression = { [string]$_.name } } |
         ForEach-Object { '{0}={1}' -f $_.name, $_.value })
-$nombres = @($lista | ForEach-Object { [string]$_.name } | Sort-Object)
+# Orden ordinal (no depende de la cultura).
+$nombres = [string[]]@($lista | ForEach-Object { [string]$_.name })
+[Array]::Sort($nombres, [System.StringComparer]::Ordinal)
+$lineasIa = [string[]]$lineasIa
+[Array]::Sort($lineasIa, [System.StringComparer]::Ordinal)
 
-if (-not (Test-Path -LiteralPath $OutDir)) { $null = New-Item -ItemType Directory -Path $OutDir -Force }
 $rutaFoto = Join-Path $OutDir 'foto-settings.json'
 $rutaIa = Join-Path $OutDir 'appsettings-ia-antes.txt'
 $rutaNombres = Join-Path $OutDir 'appsettings-nombres-antes.txt'
 
-[IO.File]::WriteAllText($rutaFoto, (($foto | ConvertTo-Json -Depth 3) + "`n"))
-[IO.File]::WriteAllText($rutaIa, (($lineasIa -join "`n") + "`n"))
-[IO.File]::WriteAllText($rutaNombres, (($nombres -join "`n") + "`n"))
+# Un fallo de escritura debe parar el script: Restore depende de foto-settings.json.
+try {
+    if (-not (Test-Path -LiteralPath $OutDir)) { $null = New-Item -ItemType Directory -Path $OutDir -Force -ErrorAction Stop }
+    [IO.File]::WriteAllText($rutaFoto, (($foto | ConvertTo-Json -Depth 3) + "`
+"))
+    $textoIa = if ($lineasIa.Count -gt 0) { ($lineasIa -join "`
+") + "`
+" } else { '' }
+    [IO.File]::WriteAllText($rutaIa, $textoIa)
+    [IO.File]::WriteAllText($rutaNombres, (($nombres -join "`
+") + "`
+"))
+}
+catch {
+    Write-Host "No se pudieron escribir los ficheros de la foto en ${OutDir}: $($_.Exception.Message)"
+    exit 2
+}
 
 Write-Host "Foto de $($foto.Count) claves de $FunctionApp"
 Write-Host $rutaFoto
