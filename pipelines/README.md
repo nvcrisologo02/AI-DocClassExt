@@ -56,7 +56,7 @@ Los resultados de estas comparaciones van a `docs/auxiliares/temps/<fecha>/` (ca
 
 ## Pipeline Release
 
-`azure-pipelines-release.yml` (pipeline `Release`, id `<id pendiente>`; AB#101583, hito 2) es la release de un botón: una ejecución es la release de un entorno, con la versión que declara el manifiesto de `releases/` (`CURRENT`; en dev, `_ensayo`). Compone los templates de esta carpeta en jobs normales y la lógica propia de la release está en `scripts/release/`. Diseño en `docs/superpowers/specs/2026-11-26-pipeline-release-un-boton-design.md` (y su enmienda del 2026-11-27); decisiones en ADR-007 y ADR-008.
+`azure-pipelines-release.yml` (pipeline `AI DocClassExt (Release)`, id `842`; AB#101583, hito 2) es la release de un botón: una ejecución es la release de un entorno, con la versión que declara el manifiesto de `releases/` (`CURRENT`; en dev, `_ensayo`). Compone los templates de esta carpeta en jobs normales y la lógica propia de la release está en `scripts/release/`. Diseño en `docs/superpowers/specs/2026-11-26-pipeline-release-un-boton-design.md` (y su enmienda del 2026-11-27); decisiones en ADR-007 y ADR-008.
 
 ### Parámetros
 
@@ -119,4 +119,4 @@ La vuelta atrás no revierte: las migraciones EF, los analyzers de CU copiados p
 
 Antes de usarla en PRE (Tarea 13 del plan): una ejecución completa con `targetEnvironment=dev` sobre el estado actual (debe acabar en verde sin cambios y con smoke 6/6) y una con `simularFalloEn=Configuracion` (u otra), comprobando con el export de la config antes y después que la vuelta atrás deja DEV como estaba. Procedimiento paso a paso en el plan del hito 2.
 
-Riesgo abierto: los aprobadores viven en `variables/aprobadores.yml`, es decir, en el repositorio; quien pueda integrar en `develop` o `master` puede cambiarlos. Se apoya en las políticas de rama (comprobación pendiente, Step 5 de la Tarea 11).
+Riesgo abierto: los aprobadores viven en `variables/aprobadores.yml`, es decir, en el repositorio; quien pueda integrar en `develop` o `master` puede cambiarlos. A 2026-11-27 el proyecto no tiene ninguna política de rama activa (`_apis/policy/configurations` devuelve 0): ni revisores mínimos en `develop` ni en `master`. Mientras no la haya, el único control es quién tiene permiso de push. Cambiar la política es una escritura en Azure DevOps fuera de este hito.
