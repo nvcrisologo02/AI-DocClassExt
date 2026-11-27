@@ -1,0 +1,18 @@
+# Fallo simulado para el ensayo de la vuelta atras de la pipeline Release (AB#101583). Es el primer paso
+# de cada stage de Migraciones a Verificacion: si el parametro simularFalloEn del run coincide con el
+# nombre de la stage, lanza una excepcion y la stage falla. Con simularFalloEn vacio no hace nada. Guard
+# solo admite un valor no vacio cuando el entorno es dev.
+parameters:
+  - name: stage
+    type: string
+  - name: simularFalloEn
+    type: string
+    default: ''
+
+steps:
+- pwsh: |
+    if ('${{ parameters.simularFalloEn }}' -eq '${{ parameters.stage }}') {
+      throw "Fallo simulado en ${{ parameters.stage }}"
+    }
+    Write-Host "Sin fallo simulado en ${{ parameters.stage }}."
+  displayName: Fallo simulado en ${{ parameters.stage }} (solo ensayo en dev)

@@ -53,3 +53,70 @@ Procedimiento:
 4. Ensayar en DEV el pipeline refactorizado antes de darlo por bueno.
 
 Los resultados de estas comparaciones van a `docs/auxiliares/temps/<fecha>/` (carpeta ignorada por git).
+
+## Pipeline Release
+
+`azure-pipelines-release.yml` (pipeline `Release`, id `<id pendiente>`; AB#101583, hito 2) es la release de un botón: una ejecución es la release de un entorno, con la versión que declara el manifiesto de `releases/` (`CURRENT`; en dev, `_ensayo`). Compone los templates de esta carpeta en jobs normales y la lógica propia de la release está en `scripts/release/`. Diseño en `docs/superpowers/specs/2026-11-26-pipeline-release-un-boton-design.md` (y su enmienda del 2026-11-27); decisiones en ADR-007 y ADR-008.
+
+### Parámetros
+
+| Parámetro | Valores | Notas |
+|---|---|---|
+| `targetEnvironment` | `dev` (por defecto), `pre`, `prod` | `dev` es solo para ensayos. Origen del salto como en el 832: `pre` desde `dev`, `prod` desde `pre`; `dev` recupera desde PRO con `-FromProd -DryRun` y sin export ni altas. |
+| `simularFalloEn` | vacío (por defecto), `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas`, `Verificacion` | Solo en dev (Guard lo rechaza fuera de dev). Fuerza un fallo al inicio de esa stage (`simular-fallo.yml`) para ensayar la vuelta atrás. |
+
+Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variables/aprobadores.yml`, las constantes del 799 y del 832 y, por entorno, el origen del salto (`sourceEnvironment`, `sourceServiceConnection`, `sourceSqlServer`, `routeArgs`, `dryRunArg`). Pool por defecto `docia-mdp-private`; `Build`, `Generate` y `Validate` en `windows-latest`; `Aprobacion` agentless. Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008).
+
+### Stages
+
+| Stage | Qué hace |
+|---|---|
+| `Guard` | Solo lectura: rama esperada por entorno, manifiesto, aprobadores, simulación, registro `ReleaseAplicada` y permisos. Emite `version`, `manifestPath`, `yaAplicada` e `ignorarRegistro` (`guard.<variable>` del job `GuardJob`). Si la versión ya está aplicada se saltan todas las demás. |
+| `Build` | Build y tests de la solución (template del 799); en paralelo a la espera de aprobación. |
+| `Aprobacion` | Dos `ManualValidation@1` encadenados (`Aprobacion1`, `Aprobacion2`), aprobadores de `aprobadores.yml`, 7 días de espera, rechazo al agotarse. En prod la segunda recuerda las cuatro puertas de PRE y el Smoke del Test Plan 100069. |
+| `Foto` | Foto de app settings, ingesta pausada, drenado del task hub (exit 3 = tiempo agotado: se rehabilita la ingesta y falla), copia de las tablas de configuración y foto del código de las tres apps. Espera a `Aprobacion` y `Build`. |
+| `FotoFallida` | Solo si falla `Foto`: rehabilita la ingesta y publica el resumen en rojo. |
+| `Migraciones` | `Generate` y `Apply` (templates del 807, sin backfill ni regla de firewall). |
+| `IA` | `Export` de la config del origen (no en dev) y `Promote` de artefactos de IA (templates del 832). |
+| `Codigo` | `Deploy` (Functions, settings, Admin y AssetResolver, en ese orden) y `Validate` (templates del 799). |
+| `Configuracion` | Pasos del manifiesto, secretos heredados de Key Vault y ciclo de vida del storage (cada uno con `-WhatIf` antes del real), reinicio con health. |
+| `Altas` | Solo pre y prod: `config-seed` y `config-apply` con `applyMissingConfig`, reinicio con health. |
+| `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con function key temporal y publicación en el Test Plan 100069. |
+| `Fin` | Solo con todo en verde: ingesta activa, cierre en `ReleaseAplicada`, `resumen.md` y artefacto `release-<env>-<build>`. |
+| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto si `Codigo` llegó a empezar, marca el registro como `Revertido`, rehabilita la ingesta, reinicia, publica el resumen en rojo y deja el run en rojo. |
+
+`simularFalloEn` coloca `simular-fallo.yml` como primer paso de `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas` y `Verificacion`.
+
+### Artefactos
+
+- `evidencias-<stage>` (`Foto`, `Configuracion`, `Altas`, `Verificacion`, `VueltaAtras`, `VueltaAtrasCierre`): ficheros que dejan los scripts en `$(Build.ArtifactStagingDirectory)/evidencias`, sin secretos ni listado completo de app settings. `evidencias-Foto/foto-codigo/*.zip` es el código desplegado antes de la release (`functions.zip`, `admin.zip`, `assetresolver.zip`).
+- `release-<env>-<build>`: `resumen.md` y las evidencias (sin los zips del código). Se publica en verde (`Fin`) y en rojo (`VueltaAtras`, `FotoFallida`).
+- Los propios de los templates: `drop-*` (build), `MigrationsScript`, `db-config`, `ai-artifacts-<env>-<intento>`, `config-diff` y `config-apply-<intento>`.
+
+### Scripts de `scripts/release/`
+
+| Script | Qué hace |
+|---|---|
+| `Get-ReleaseManifest.ps1`, `Test-ReleaseManifest.ps1` | Leen y validan el manifiesto de `releases/`. |
+| `Invoke-ReleaseGuard.ps1` | Comprobaciones de `Guard` y variables de salida. |
+| `Test-ReleasePermisos.ps1` | Lecturas que comprueban los permisos de la service connection (lo llama `Guard`). |
+| `Save-ReleaseFotoSettings.ps1` / `Restore-ReleaseFotoSettings.ps1` | Foto y restauración de los app settings que toca la release. |
+| `Set-ReleaseIngesta.ps1` | Pausa o reactiva la ingesta (`AzureWebJobs.IngestDocument.Disabled`). |
+| `Wait-ReleaseTaskHubDrenado.ps1` | Espera a que el task hub no tenga instancias en curso (exit 3 al agotar el tiempo). |
+| `New-ReleaseFotoBd.ps1` / `Restore-ReleaseFotoBd.ps1` | Copia `<Tabla>__rel_<BuildId>` de las tablas de configuración y restauración por `MERGE`. |
+| `Save-ReleaseFotoCodigo.ps1` | Descarga por Kudu el código desplegado de las tres apps. |
+| `Invoke-ReleasePasos.ps1` | Aplica los pasos del manifiesto (con ensayo previo) y los registra por hash. |
+| `Restart-ReleaseFunctionApp.ps1` | Reinicia la Function App y espera al health. |
+| `Invoke-ReleaseSmoke.ps1` | Smoke E2E con function key temporal y publicación en el Test Plan 100069. |
+| `New-ReleaseResumen.ps1` | Genera `resumen.md` a partir de las evidencias. |
+| `ReleaseCommon.psm1`, `ReleaseRegistro.psm1` | Utilidades de `az` y SQL, y registro en `ReleaseAplicada` (`Register-ReleaseCierre`, `Set-ReleaseRevertida`). |
+
+### Qué no se deshace
+
+La vuelta atrás no revierte: las migraciones EF, los analyzers de CU copiados por el 832 (sobrescriben los del destino), los secretos heredados de Key Vault borrados (AB#101450), los deployments de IA (aditivos) ni el artefacto de embeddings copiado. Las copias `<Tabla>__rel_<BuildId>` se conservan. Si falla `Foto` no se ha tocado nada más.
+
+### Ensayo
+
+Antes de usarla en PRE (Tarea 13 del plan): una ejecución completa con `targetEnvironment=dev` sobre el estado actual (debe acabar en verde sin cambios y con smoke 6/6) y una con `simularFalloEn=Configuracion` (u otra), comprobando con el export de la config antes y después que la vuelta atrás deja DEV como estaba. Procedimiento paso a paso en el plan del hito 2.
+
+Riesgo abierto: los aprobadores viven en `variables/aprobadores.yml`, es decir, en el repositorio; quien pueda integrar en `develop` o `master` puede cambiarlos. Se apoya en las políticas de rama (comprobación pendiente, Step 5 de la Tarea 11).

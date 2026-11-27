@@ -1,0 +1,23 @@
+# Publicacion de las evidencias de una stage de la pipeline Release (AB#101583): el artefacto
+# evidencias-<stage> con lo que los scripts hayan dejado en $(Build.ArtifactStagingDirectory)/evidencias.
+# Ultimo paso de cada stage que produce evidencias; se ejecuta tambien si la stage falla, para que el
+# resumen y la vuelta atras dispongan de lo que se llego a generar. Nunca debe haber secretos en esa
+# carpeta (los scripts de scripts/release no los escriben).
+parameters:
+  - name: stage
+    type: string
+
+steps:
+# La carpeta puede no existir si la stage fallo antes de escribir nada; el marcador evita publicar vacio.
+- pwsh: |
+    $dir = '$(Build.ArtifactStagingDirectory)/evidencias'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Set-Content -LiteralPath (Join-Path $dir 'stage-${{ parameters.stage }}.txt') -Value 'Evidencias de la stage ${{ parameters.stage }} del build $(Build.BuildId)' -Encoding utf8
+  displayName: Preparar carpeta de evidencias de ${{ parameters.stage }}
+  condition: succeededOrFailed()
+- task: PublishPipelineArtifact@1
+  displayName: Publicar evidencias-${{ parameters.stage }}
+  condition: succeededOrFailed()
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/evidencias'
+    artifact: 'evidencias-${{ parameters.stage }}'
