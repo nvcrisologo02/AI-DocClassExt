@@ -93,6 +93,7 @@ Arquitectura, infraestructura, modelo de datos y decisiones.
 | [decisiones/ADR-005-altas-config-clave-natural-configseed.md](decisiones/ADR-005-altas-config-clave-natural-configseed.md) | Altas de configuración por clave natural en la etapa ConfigSeed del pipeline 832 (`applyMissingConfig`) | vigente (aceptada) |
 | [decisiones/ADR-006-activacion-clasificador-hibrido-embeddings.md](decisiones/ADR-006-activacion-clasificador-hibrido-embeddings.md) | Activación del clasificador híbrido por embeddings (modo `hibrido`, umbral 0,6; DEV desde 2026-11-26, PRE y PRO con la v1.2.0) | vigente (aceptada) |
 | [decisiones/ADR-007-pipeline-release-un-boton-templates-vuelta-atras.md](decisiones/ADR-007-pipeline-release-un-boton-templates-vuelta-atras.md) | Pipeline de release de un botón por step templates con vuelta atrás automática (hito 1 en la rama de AB#101570; pipeline `Release` en el hito 2) | vigente (aceptada) |
+| [decisiones/ADR-008-aprobaciones-al-principio-pipeline-release.md](decisiones/ADR-008-aprobaciones-al-principio-pipeline-release.md) | Dos aprobaciones secuenciales al principio de la pipeline `Release` con ManualValidation; sustituye el punto «una aprobación por run» del ADR-007 (hito 2) | vigente (aceptada) |
 | [infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md](infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md) | Plantilla genérica Staging/Production que no refleja lo desplegado | sustituido por INFRAESTRUCTURA_REAL_DESPLEGADA |
 
 ## Familia explotación
@@ -147,7 +148,7 @@ docs/
 ├── 08_CHECKLISTS_DESPLIEGUE.md
 ├── 15_API_DOCUMENTATION_V1_4.md        (sustituido)
 ├── contratos/          CONTRATO_API_HTTP, PLANTILLA_PLUGINS_JSON
-├── decisiones/         ADR-001 … ADR-007
+├── decisiones/         ADR-001 … ADR-008
 ├── diagrams/           UMBRAL_PRIORIZACION, CONFIANZA_UMBRAL (sustituido), fuentes .mmd
 ├── especificaciones/   DATA_MODELS_ER_DIAGRAM, ASSETRESOLVER, GDC_SINTWS, PROMPTS_CONFIGURABLES, PROMPT_CLASIFICACION_COMPLETO, LIMITE_PAGINAS, OPTIMIZACION_ALMACENAMIENTO_BD_PRO
 ├── guias/              QUICKSTART, HOST_LOCAL_CONTRA_DEV, EXTENSIBILIDAD_PLUGIN_SYSTEM, EXTRACCION_CU, CLASIFICACION_DOCUMENTOS, CLASIFICACION_RESTRINGIDA, TROUBLESHOOTING, EASYAUTH_ADMIN, RESTRICCION_ACCESO_ADMIN, SOLICITUD_APP_REGISTRATION_ADMIN

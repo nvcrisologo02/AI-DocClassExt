@@ -57,3 +57,7 @@ Complementa ADR-001 (promoción de artefactos de IA, cuyos templates reutiliza) 
 
 - A: deja cuatro o cinco runs encadenados con aprobaciones en runs distintos, esperas frágiles y una vuelta atrás del código que tendría que relanzar el 799 por REST. El operador seguiría viendo varios runs.
 - C: dos copias de los mismos pasos que divergen en la primera release.
+
+---
+
+> Nota posterior (2026-11-27): el punto «una aprobación por run» de la Decisión, y el deployment job de `Foto` que lo sostiene, los sustituye el [ADR-008](ADR-008-aprobaciones-al-principio-pipeline-release.md) (dos aprobaciones secuenciales al principio con ManualValidation). El resto de esta decisión sigue vigente.
