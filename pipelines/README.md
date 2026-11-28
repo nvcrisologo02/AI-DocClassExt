@@ -115,15 +115,15 @@ Regla: un job se queda en `docia-mdp-private` solo si hace SQL, Key Vault (plano
 | `Codigo` | Un job por template, como en el 799, todos en agente alojado: `DeployFunctions` (`deploy-functions.yml` y `functions-settings.yml`), `DeployAdmin` (en paralelo a Functions) y `DeployAssetResolver` (tras Functions); `Validate` depende de los tres. Con varios templates en un mismo job, cada `checkout: self` deja el repo en `s/<nombre>` y fallan las rutas relativas de los scripts. |
 | `Configuracion` | Pasos del manifiesto, secretos heredados de Key Vault y ciclo de vida del storage (cada uno con `-WhatIf` antes del real), reinicio con health en un job aparte (`ReinicioJob`, agente alojado). |
 | `Altas` | Solo pre y prod: `config-seed` y `config-apply` con `applyMissingConfig`; reinicio con health en `ReinicioJob` (agente alojado). |
-| `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con la clave maestra de la Function App (la ingesta esta deshabilitada durante la release y cualquier otra clave da 404) y publicación en el Test Plan 100069 (el smoke va en `SmokeJob`, agente alojado, tras `VerifJob`). |
+| `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con la clave maestra de la Function App (la ingesta está deshabilitada durante la release y cualquier otra clave da 404) y publicación en el Test Plan 100069 (el smoke va en `SmokeJob`, agente alojado, tras `VerifJob`). |
 | `Fin` | Solo con todo en verde: ingesta activa, cierre en `ReleaseAplicada`, `resumen.md` y artefacto `release-<env>-<build>`. |
-| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto desde `evidencias-FotoCodigo`, un job por app y solo si su job de `Codigo` no fue `Skipped` (`RevertirFunctions`, `RevertirAdmin` y `RevertirAssetResolver`, agente alojado), marca el registro como `Revertido`, rehabilita la ingesta (`Cierre`, que marca `Revertido` solo si `Restaurar` y los tres jobs de reversión acaban en `Succeeded`, `SucceededWithIssues` o `Skipped`), reinicia (`ReinicioVuelta`, agente alojado), publica el resumen en rojo, con los tres redespliegues por separado, y deja el run en rojo (`ResumenVuelta`, agente alojado). |
+| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto desde `evidencias-FotoCodigo`, un job por app y solo si su job de `Codigo` no fue `Skipped` (`RevertirFunctions`, `RevertirAdmin` y `RevertirAssetResolver`, agente alojado), marca el registro como `Revertido`, rehabilita la ingesta (`Cierre`, que marca `Revertido` solo si la restauración de las tablas de BD terminó bien: salida `bdRestaurada` del paso `Restore-ReleaseFotoBd.ps1`, porque la spec liga `Revertido` a las tablas; si falla un redespliegue del código el registro queda `Revertido` igualmente y lo dice el resumen), reinicia (`ReinicioVuelta`, agente alojado), publica el resumen en rojo y deja el run en rojo (`ResumenVuelta`, agente alojado). `resumen.md` lleva la línea `Vuelta atras: completa` o `INCOMPLETA (<jobs y resultado>)` y el resultado real de la reposición de settings y de cada redespliegue (los jobs de reversión corren aunque `Restaurar` falle). |
 
 `simularFalloEn` coloca `simular-fallo.yml` como primer paso de `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas` y `Verificacion`.
 
 ### Artefactos
 
-- `evidencias-<stage>` (`Foto`, `FotoCodigo`, `Configuracion`, `Altas`, `Verificacion`, `VueltaAtras`, `VueltaAtrasCierre`): ficheros que dejan los scripts en `$(Build.ArtifactStagingDirectory)/evidencias`, sin secretos ni listado completo de app settings. `evidencias-FotoCodigo/foto-codigo/*.zip` (más `foto-codigo.json`) es el código desplegado antes de la release (`functions.zip`, `admin.zip`, `assetresolver.zip`).
+- `evidencias-<stage>` (`Foto`, `FotoCodigo`, `Configuracion`, `ConfiguracionReinicio`, `Altas`, `AltasReinicio`, `Verificacion`, `VerificacionSmoke`, `VueltaAtras`, `VueltaAtrasCierre`, `VueltaAtrasReinicio`): ficheros que dejan los scripts en `$(Build.ArtifactStagingDirectory)/evidencias`, sin secretos ni listado completo de app settings. `evidencias-FotoCodigo/foto-codigo/*.zip` (más `foto-codigo.json`) es el código desplegado antes de la release (`functions.zip`, `admin.zip`, `assetresolver.zip`).
 - `release-<env>-<build>`: `resumen.md` y las evidencias (sin los zips del código). Se publica en verde (`Fin`) y en rojo (`VueltaAtras`, `FotoFallida`).
 - Los propios de los templates: `drop-*` (build), `MigrationsScript`, `db-config`, `ai-artifacts-<env>-<intento>`, `config-diff` y `config-apply-<intento>`.
 
@@ -137,7 +137,7 @@ Regla: un job se queda en `docia-mdp-private` solo si hace SQL, Key Vault (plano
 | `Save-ReleaseFotoSettings.ps1` / `Restore-ReleaseFotoSettings.ps1` | Foto y restauración de los app settings que toca la release. |
 | `Set-ReleaseIngesta.ps1` | Pausa o reactiva la ingesta (`AzureWebJobs.IngestDocument.Disabled`). |
 | `Wait-ReleaseTaskHubDrenado.ps1` | Espera a que el task hub no tenga instancias en curso (exit 3 al agotar el tiempo). |
-| `New-ReleaseFotoBd.ps1` / `Restore-ReleaseFotoBd.ps1` | Copia `<Tabla>__rel_<BuildId>` de las tablas de configuración y restauración por `MERGE`. |
+| `New-ReleaseFotoBd.ps1` / `Restore-ReleaseFotoBd.ps1` | Copia `<Tabla>__rel_<BuildId>` de las tablas de configuración y restauración sin `MERGE`: en una sola transacción, `UPDATE` e `INSERT` de cada tabla de padre a hija y después `DELETE` de hija a padre; solo se restauran las columnas presentes en la tabla y en su copia. |
 | `Save-ReleaseFotoCodigo.ps1` | Descarga por Kudu, con token de Entra (sin autenticación básica), el código desplegado de las tres apps. |
 | `Invoke-ReleasePasos.ps1` | Aplica los pasos del manifiesto (con ensayo previo) y los registra por hash. |
 | `Restart-ReleaseFunctionApp.ps1` | Reinicia la Function App y espera al health. |
@@ -147,7 +147,14 @@ Regla: un job se queda en `docia-mdp-private` solo si hace SQL, Key Vault (plano
 
 ### Qué no se deshace
 
-La vuelta atrás no revierte: las migraciones EF, los analyzers de CU copiados por el 832 (sobrescriben los del destino), los secretos heredados de Key Vault borrados (AB#101450), los deployments de IA (aditivos) ni el artefacto de embeddings copiado. Las copias `<Tabla>__rel_<BuildId>` se conservan. Si falla `Foto` no se ha tocado nada más.
+La vuelta atrás no revierte: las migraciones EF, los analyzers de CU copiados por el 832 (sobrescriben los del destino), los secretos heredados de Key Vault borrados (AB#101450), los deployments de IA (aditivos) ni el artefacto de embeddings copiado. Las copias `<Tabla>__rel_<BuildId>` se conservan. Si falla `Foto` no se ha tocado nada más. `RevertirAdmin` compone el template `deploy-admin.yml` entero, así que, además del zip de la foto, reaplica la identidad y los settings del Admin del commit nuevo (hoy estables: `BaseUrl` y referencia a Key Vault).
+
+### Cancelar o reintentar
+
+- Un run cancelado después de `Foto` no dispara `VueltaAtras`: sus condiciones miran `Failed`, no `Canceled`. Queda la ingesta pausada y el entorno a medias (pueden estar aplicadas migraciones, IA, código o settings). A mano: reactivar la ingesta con `pwsh -NoProfile -File ./scripts/release/Set-ReleaseIngesta.ps1 -ResourceGroup <rg> -FunctionApp <app> -Estado Activa`, mirar qué stages llegaron a correr en la vista del run y en sus artefactos `evidencias-*` y deshacer lo necesario con el camino manual de respaldo (`docs/releases/v1.2.0/GUIA_OPERADOR_PRE.md` y el Anexo B de `docs/procedimientos/RELEASE_MANAGEMENT.md`).
+- No usar «Rerun failed jobs» ni «Retry stage»: los artefactos tienen nombres fijos y la foto de BD y de código es de ese `BuildId`. Siempre se lanza un run nuevo: `Guard` lee el registro e `Invoke-ReleasePasos.ps1` salta los pasos ya aplicados por hash y rehace el resto. Una versión ya cerrada termina en verde sin hacer nada y con un aviso.
+- `FotoFallida` rehabilita la ingesta aunque no la hubiera pausado este run: si la ingesta estaba pausada a propósito antes de lanzar la release, hay que volver a pausarla.
+- `FinJob` reactiva la ingesta antes de `Register-ReleaseCierre`. Si el cierre falla, el run queda en rojo sin vuelta atrás y el siguiente run rehace todo porque el registro sigue en `Parcial`.
 
 ### Ensayo
 
@@ -160,7 +167,7 @@ Ensayada en DEV el 2026-11-27 y 2026-11-28 (rama `feature/101583-pipeline-releas
 | 80302 | dev, `ninguna` | Verde (run A): smoke 6/6 y 3/3, Test Plan run 1076994, pasos y cierre `Aplicado`, hashes iguales salvo `FechaActualizacion` de `clasificador.embeddings`. |
 | 80303 | dev, `simularFalloEn=Configuracion` | Rojo por diseño (run B): vuelta atrás completa, hashes y settings iguales a la foto, sin filas del run en el registro. |
 | 80306 | dev, `ninguna` | Verde (run D): repetición de A, smoke 6/6 y 3/3, Test Plan run 1077000. |
-| 80307, 80308 | pre, `ninguna` | Rojos en `Guard` por diseño (paso 6): la rama de trabajo no es `develop` y se rechaza antes de tocar PRE. En el 80307 `GuardKudu` dio timeout de 30 s en Admin y AssetResolver; en el 80308 pasó, así que fue transitorio. |
+| 80307, 80308 | pre, `ninguna` | Rojos en `Guard` por diseño (paso 6): la rama de trabajo no es `develop` y se rechaza antes de tocar PRE. En el 80307 `GuardKudu` dio timeout de 30 s en Admin y AssetResolver; en el 80308 pasó, así que fue transitorio (la comprobación de Kudu reintenta ahora una vez tras 15 s). |
 
 Con `simularFalloEn=IA` no hay resultado recogido en este documento (no verificado). No se ha ensayado el salto por hash de pasos ya aplicados con una versión real (solo Pester, porque `_ensayo` ignora el registro) ni las altas de configuración (no corren en dev).
 
