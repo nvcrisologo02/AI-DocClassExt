@@ -36,9 +36,11 @@ BeforeAll {
     }
 
     function global:Invoke-T10 {
-        param([string]$Dir, [string]$Resultado = 'Rojo', [string]$Stages = '[{"nombre":"Guard","resultado":"succeeded"},{"nombre":"Smoke","resultado":"failed"}]')
+        param([string]$Dir, [string]$Resultado = 'Rojo', [string]$Stages = '[{"nombre":"Guard","resultado":"succeeded"},{"nombre":"Smoke","resultado":"failed"}]', [string]$FotoSettingsPath = '')
         $script:out = Join-Path $TestDrive "resumen-$([guid]::NewGuid().ToString('N')).md"
-        $null = & $script:resumen -Environment pre -Version v1.2.0 -Commit abc1234 -BuildId 99 -Resultado $Resultado -EvidenciasDir $Dir -StageResults $Stages -OutFile $script:out 6>&1
+        $extra = @{}
+        if ($FotoSettingsPath) { $extra['FotoSettingsPath'] = $FotoSettingsPath }
+        $null = & $script:resumen -Environment pre -Version v1.2.0 -Commit abc1234 -BuildId 99 -Resultado $Resultado -EvidenciasDir $Dir -StageResults $Stages -OutFile $script:out @extra 6>&1
         return $LASTEXITCODE
     }
 }
@@ -84,6 +86,71 @@ Describe 'New-ReleaseResumen con evidencias completas' {
     }
     It 'lleva el aviso fijo' {
         $script:md | Should -Match 'los analyzers de CU y las migraciones EF no se deshacen \(ADR-007\)'
+    }
+}
+
+Describe 'New-ReleaseResumen: resultado real de la vuelta atras' {
+    BeforeAll {
+        $script:dirV = Join-Path $TestDrive 'vuelta'
+        New-T10Evidencias $script:dirV
+        function global:New-T10Stages {
+            param([hashtable]$Resultados)
+            $filas = foreach ($n in 'Restaurar BD y settings', 'Revertir Functions', 'Revertir Admin', 'Revertir AssetResolver', 'Registro e ingesta', 'Reinicio') {
+                $r = if ($Resultados.ContainsKey($n)) { $Resultados[$n] } else { 'Succeeded' }
+                [ordered]@{ nombre = "VueltaAtras: $n"; resultado = $r }
+            }
+            ConvertTo-Json -InputObject @($filas) -Compress
+        }
+    }
+    AfterAll { Remove-Item function:global:New-T10Stages -ErrorAction SilentlyContinue }
+
+    It 'con un job de reversion Failed dice INCOMPLETA, lo nombra y no afirma que redespliega' {
+        $st = New-T10Stages @{ 'Revertir Admin' = 'Failed' }
+        (Invoke-T10 -Dir $script:dirV -Stages $st) | Should -Be 0
+        $md = Get-Content -LiteralPath $script:out -Raw
+        $md | Should -Match 'Vuelta atras: INCOMPLETA'
+        $md | Should -Match 'INCOMPLETA \([^)]*Revertir Admin[^)]*Failed'
+        $md | Should -Not -Match 'redespliega desde ella'
+        $md | Should -Match 'Admin: NO se redesplego'
+    }
+    It 'con todos Succeeded o Skipped dice completa' {
+        $st = New-T10Stages @{ 'Revertir AssetResolver' = 'Skipped' }
+        (Invoke-T10 -Dir $script:dirV -Stages $st) | Should -Be 0
+        $md = Get-Content -LiteralPath $script:out -Raw
+        $md | Should -Match '(?m)^- Vuelta atras: completa'
+        $md | Should -Not -Match 'INCOMPLETA'
+        $md | Should -Match 'AssetResolver: no se redesplego: su job de Codigo no llego a correr'
+        $md | Should -Match 'Functions: redesplegado desde la foto'
+    }
+    It 'la reposicion de settings sale del resultado del job Restaurar, no de inferirla' {
+        $st = New-T10Stages @{ 'Restaurar BD y settings' = 'Failed' }
+        (Invoke-T10 -Dir $script:dirV -Stages $st) | Should -Be 0
+        $md = Get-Content -LiteralPath $script:out -Raw
+        $md | Should -Match 'INCOMPLETA'
+        $md | Should -Match 'No se confirmo la reposicion de la foto de settings'
+    }
+    It 'sin filas VueltaAtras o con resultado Verde no hay linea de vuelta atras' {
+        (Invoke-T10 -Dir $script:dirV) | Should -Be 0
+        (Get-Content -LiteralPath $script:out -Raw) | Should -Not -Match 'Vuelta atras:'
+        (Invoke-T10 -Dir $script:dirV -Resultado Verde -Stages (New-T10Stages @{})) | Should -Be 0
+        (Get-Content -LiteralPath $script:out -Raw) | Should -Not -Match 'Vuelta atras:'
+    }
+    It 'con -FotoSettingsPath lista los nombres de la foto (aunque no este en evidencias) y ningun valor' {
+        $vacio = Join-Path $TestDrive 'sin-settings'
+        New-Item -ItemType Directory -Path $vacio | Out-Null
+        $foto = Join-Path $TestDrive 'aparte/foto-settings.json'
+        New-T10Json $foto ([ordered]@{ 'GDC__BypassSslValidation' = 'SECRETO-VALOR'; 'AI__Resources__x__Endpoint' = 'https://valor.example'; 'PromptDefaults__ModelKey' = $null })
+        (Invoke-T10 -Dir $vacio -FotoSettingsPath $foto) | Should -Be 0
+        $md = Get-Content -LiteralPath $script:out -Raw
+        $md | Should -Match 'Foto previa de 3 settings'
+        $md | Should -Match 'AI__Resources__x__Endpoint, GDC__BypassSslValidation, PromptDefaults__ModelKey'
+        $md | Should -Not -Match 'SECRETO-VALOR'
+        $md | Should -Not -Match 'valor\.example'
+    }
+    It 'con -FotoSettingsPath que no existe el bloque de settings dice sin datos' {
+        $vacio = Join-Path $TestDrive 'sin-settings'
+        (Invoke-T10 -Dir $vacio -FotoSettingsPath (Join-Path $TestDrive 'no/existe.json')) | Should -Be 0
+        (Get-Content -LiteralPath $script:out -Raw) | Should -Match '## App settings\s+sin datos'
     }
 }
 
