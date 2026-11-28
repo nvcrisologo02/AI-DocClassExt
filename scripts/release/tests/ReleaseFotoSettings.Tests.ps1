@@ -105,6 +105,22 @@ Describe 'Save-ReleaseFotoSettings' {
         Test-Path (Join-Path $fichero 'sub' 'foto-settings.json') | Should -BeFalse
     }
 
+    It 'los ficheros de la foto terminan las lineas con LF (sin CR) con independencia del checkout' {
+        Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 0; $global:T6Lista }
+        $null = & $script:save -ResourceGroup rg1 -FunctionApp app1 -OutDir $script:out 6>&1
+        $LASTEXITCODE | Should -Be 0
+        # El cuerpo de ConvertTo-Json usa el salto de la plataforma; lo que fija el script es el terminador.
+        foreach ($f in 'foto-settings.json', 'appsettings-ia-antes.txt', 'appsettings-nombres-antes.txt') {
+            $bytes = [IO.File]::ReadAllBytes((Join-Path $script:out $f))
+            $bytes.Length | Should -BeGreaterThan 1
+            $bytes[-1] | Should -Be 10
+            $bytes[-2] | Should -Not -Be 13
+        }
+        foreach ($f in 'appsettings-ia-antes.txt', 'appsettings-nombres-antes.txt') {
+            [IO.File]::ReadAllBytes((Join-Path $script:out $f)) | Should -Not -Contain 13
+        }
+    }
+
     It 'un fallo de az termina con exit 2' {
         Mock Invoke-ReleaseAz { $global:LASTEXITCODE = 1; $null }
         $null = & $script:save -ResourceGroup rg1 -FunctionApp app1 -OutDir $script:out 6>&1

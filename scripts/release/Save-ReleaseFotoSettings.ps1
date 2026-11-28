@@ -70,15 +70,11 @@ $rutaNombres = Join-Path $OutDir 'appsettings-nombres-antes.txt'
 # Un fallo de escritura debe parar el script: Restore depende de foto-settings.json.
 try {
     if (-not (Test-Path -LiteralPath $OutDir)) { $null = New-Item -ItemType Directory -Path $OutDir -Force -ErrorAction Stop }
-    [IO.File]::WriteAllText($rutaFoto, (($foto | ConvertTo-Json -Depth 3) + "`
-"))
-    $textoIa = if ($lineasIa.Count -gt 0) { ($lineasIa -join "`
-") + "`
-" } else { '' }
+    # Saltos explicitos "`n" (LF): el resultado no depende del fin de linea del checkout del script.
+    [IO.File]::WriteAllText($rutaFoto, (($foto | ConvertTo-Json -Depth 3) + "`n"))
+    $textoIa = if ($lineasIa.Count -gt 0) { ($lineasIa -join "`n") + "`n" } else { '' }
     [IO.File]::WriteAllText($rutaIa, $textoIa)
-    [IO.File]::WriteAllText($rutaNombres, (($nombres -join "`
-") + "`
-"))
+    [IO.File]::WriteAllText($rutaNombres, (($nombres -join "`n") + "`n"))
 }
 catch {
     Write-Host "No se pudieron escribir los ficheros de la foto en ${OutDir}: $($_.Exception.Message)"
