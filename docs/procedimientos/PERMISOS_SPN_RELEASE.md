@@ -103,11 +103,12 @@ appId `543f5a54-57b0-463d-b7d3-b3a0e542d507`, object id `cad10f65-0486-4714-a04d
 - SQL: usuario `sareb-AI DocClassExt-<endpoint>` con `db_ddladmin`, `db_datareader` y `db_datawriter` en `DocumentIA` de DEV, PRE y PRO (`grant-pipeline-sql-user.sql` aplicado en los tres). El SID de ese usuario `FROM EXTERNAL PROVIDER` es el appId, no el object id.
 - Para resolver object id con `az ad sp show` hay que hacer antes `az logout` y `az login`: con el token de Graph en caché falla con `TokenCreatedWithOutdatedPolicies`.
 - Test Plans: Project Build Service con permiso `Create test runs` y `View test runs` en el namespace del proyecto. La escritura real quedó confirmada en los ensayos: el smoke publicó los Test Plan runs 1076994 (run 80302) y 1077000 (run 80306).
-- Autorización de pipelines por service connection a fecha 2026-11-27, antes de crear la Release: DEV 799, 800, 802, 803, 807, 832; PRE 799, 800, 801, 802, 803, 807, 832; PRO 799, 800, 801, 802, 807, 832; `Promocion IA` solo 832. Lectura anterior a la pipeline 842.
+- Autorización de pipelines por service connection a fecha 2026-11-27, antes de crear la Release: DEV 799, 800, 802, 803, 807, 832; PRE 799, 800, 801, 802, 803, 807, 832; PRO 799, 800, 801, 802, 807, 832; `Promocion IA` solo 832. Foto histórica, anterior a la pipeline 842. Lectura posterior (2026-11-27): la 842 se autorizó con el sí del usuario (PATCH de `pipelinePermissions`) en las service connections DEV, PRE, PRO y `Promocion IA` y en la cola `docia-mdp-private` (id 3038), y se volvió a leer en las cinco: autorizada. Azure Pipelines (2707) ya era `allPipelines`.
 
 ### 3.6 Qué no está verificado
 
-- Autorización de la pipeline Release (842) en cada service connection. Evidencia indirecta de los ensayos: los runs de DEV (80301, 80302, 80303 y 80306) usaron la conexión de DEV y `Promocion IA` (stage `IA`, `Promote`) y pasaron, por lo que ambas están autorizadas para la 842; la de PRE solo se ejercitó en `Guard` (runs 80307 y 80308, la rama se rechazó después); la de PRO no se ha ejercitado con la 842 y su autorización no está comprobada.
+La autorización de la pipeline 842 en las service connections sí está comprobada (apartado 3.5).
+
 - Escritura real de las service connections de PRE y PRO en Key Vault y storage: los roles se asignaron y se releyeron, pero ninguna escritura se ha ejercitado en PRE ni PRO (en DEV los ensayos solo copian en modo `-DryRun`).
 - Los permisos de escritura de los scripts se ejercitan en el primer uso real de cada entorno; una lectura de `Guard` no los demuestra.
 
@@ -137,7 +138,7 @@ Lo que `Guard` no comprueba:
 - Test Plans: `Guard` no lee el plan 100069 ni prueba el permiso del Build Service. La escritura se ejercita en la stage `Verificacion` con `publish-smk-run.ps1` (confirmada en los ensayos de DEV, apartado 3.5).
 - La service connection `AI DocClassExt Promocion IA` (la usa `Promote`, no `Guard`).
 - Permisos de escritura. Una lectura no demuestra borrar secretos, subir blobs ni escribir en Test Plans. Esos se ejercitan antes en el modo de solo lectura de cada script (`-WhatIf` o `-DryRun`) y, la primera vez, en el entorno real.
-- La autorización de la propia pipeline sobre cada service connection (apartado 3.6).
+- La autorización de la propia pipeline sobre cada service connection: no es una lectura de `Guard`; se comprobó aparte el 2026-11-27 (apartado 3.5).
 
 ## 5. Si falta algún permiso
 
@@ -149,5 +150,4 @@ Lo que `Guard` no comprueba:
 
 La petición a Plataforma se cerró sin enviarse: no hace falta, los roles los asignó el usuario el 2026-11-27 y están releídos. Queda solo:
 
-- [ ] Confirmar la autorización de la pipeline Release (842) en `AI DocClassExt PRO` (la de PRE se ejercitó solo en `Guard`), y la de PRE en un run completo (primer uso real en PRE: v1.2.0, AB#101584).
 - [ ] Ejercitar la escritura real en Key Vault y storage de PRE y PRO en el primer uso de cada entorno (apartado 3.6).
