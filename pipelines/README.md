@@ -151,6 +151,21 @@ La vuelta atrás no revierte: las migraciones EF, los analyzers de CU copiados p
 
 ### Ensayo
 
-Antes de usarla en PRE (Tarea 13 del plan): una ejecución completa con `targetEnvironment=dev` sobre el estado actual (debe acabar en verde sin cambios y con smoke 6/6) y una con `simularFalloEn=Configuracion` (u otra), comprobando con el export de la config antes y después que la vuelta atrás deja DEV como estaba. Procedimiento paso a paso en el plan del hito 2.
+Ensayada en DEV el 2026-11-27 y 2026-11-28 (rama `feature/101583-pipeline-release-hito2`, pipeline 842, versión `_ensayo`, que ignora el registro `ReleaseAplicada` pero lo escribe). Detalle de cada run y duraciones por stage en `docs/auxiliares/temps/2026-11-27/ensayos-release/ensayos.md` (temporal, no versionado).
+
+| Run | Parámetros | Resultado |
+|---|---|---|
+| 80295, 80297, 80299 | dev, `ninguna` | Rojos de puesta a punto, corregidos en la propia rama: Kudu con Bearer de Entra y `/api/settings` (80295), `az.cmd` con paréntesis y Kudu y HTTP al host desde agente alojado (80297), un job por template de despliegue (80299, DEV quedó igual). |
+| 80301 | dev, `ninguna` | Rojo en `Verificacion` (smoke 1/6: `IngestDocument` 404 con la clave `default`). Vale como ensayo de vuelta atrás tras fallo real: restauración completa, hashes iguales y pasos `Revertido`. Corregido con la clave maestra. |
+| 80302 | dev, `ninguna` | Verde (run A): smoke 6/6 y 3/3, Test Plan run 1076994, pasos y cierre `Aplicado`, hashes iguales salvo `FechaActualizacion` de `clasificador.embeddings`. |
+| 80303 | dev, `simularFalloEn=Configuracion` | Rojo por diseño (run B): vuelta atrás completa, hashes y settings iguales a la foto, sin filas del run en el registro. |
+| 80306 | dev, `ninguna` | Verde (run D): repetición de A, smoke 6/6 y 3/3, Test Plan run 1077000. |
+| 80307, 80308 | pre, `ninguna` | Rojos en `Guard` por diseño (paso 6): la rama de trabajo no es `develop` y se rechaza antes de tocar PRE. En el 80307 `GuardKudu` dio timeout de 30 s en Admin y AssetResolver; en el 80308 pasó, así que fue transitorio. |
+
+Con `simularFalloEn=IA` no hay resultado recogido en este documento (no verificado). No se ha ensayado el salto por hash de pasos ya aplicados con una versión real (solo Pester, porque `_ensayo` ignora el registro) ni las altas de configuración (no corren en dev).
+
+Una ejecución completa en dev dura unos 40 minutos de máquina; el arranque de agente en `docia-mdp-private` cuesta unos 160-195 s por job.
+
+Pendiente: el primer uso real en PRE es la v1.2.0 (AB#101584), con rama `develop`. Permisos de las service connections en `docs/procedimientos/PERMISOS_SPN_RELEASE.md`.
 
 Riesgo abierto: los aprobadores viven en `variables/aprobadores.yml`, es decir, en el repositorio; quien pueda integrar en `develop` o `master` puede cambiarlos. A 2026-11-27 el proyecto no tiene ninguna política de rama activa (`_apis/policy/configurations` devuelve 0): ni revisores mínimos en `develop` ni en `master`. Mientras no la haya, el único control es quién tiene permiso de push. Cambiar la política es una escritura en Azure DevOps fuera de este hito.

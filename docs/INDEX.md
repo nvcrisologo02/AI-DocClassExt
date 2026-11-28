@@ -103,7 +103,7 @@ Release y despliegue, operación, observabilidad, incidentes y acceso.
 | Documento | Contenido | Estado |
 |---|---|---|
 | [procedimientos/RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release DEV → PRE → PRO: fases 0 a 5, puertas de PRE, catálogo de pipelines, vuelta atrás, secretos y app settings | vigente |
-| [procedimientos/PERMISOS_SPN_RELEASE.md](procedimientos/PERMISOS_SPN_RELEASE.md) | Petición a Plataforma de los permisos de las service connections para la pipeline de release (por entorno, rol, paso y comprobación de `Guard`). Solicitud pendiente de enviar | vigente |
+| [procedimientos/PERMISOS_SPN_RELEASE.md](procedimientos/PERMISOS_SPN_RELEASE.md) | Inventario de los permisos de las service connections para la pipeline de release (identidades, roles reales por entorno, lo asignado el 2026-11-27 y comprobación de `Guard`). Permisos completos; no hay petición a Plataforma | vigente |
 | [../pipelines/README.md](../pipelines/README.md) | Step templates de `pipelines/templates/` (qué pipeline de origen, parámetros, artefactos) y cómo comparar el YAML expandido antes y después de refactorizar | vigente |
 | [../releases/README.md](../releases/README.md) | Convención `releases/` de la raíz: `CURRENT`, `release.schema.json` y `<versión>/release.json`, que lee la pipeline de release. No confundir con `docs/releases/` | vigente |
 | [releases/README.md](releases/README.md) | Registro de releases por versión (`releases/vX.Y.Z/release.md`, `runbook.md`, `evidencias/`) y plantillas en `releases/_plantilla/` | vigente; cada versión es histórico |
