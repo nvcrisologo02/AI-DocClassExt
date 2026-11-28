@@ -486,6 +486,7 @@ stages:
           -Resultado Rojo `
           -EvidenciasDir $todas `
           -StageResults $json `
+          -FotoSettingsPath '$(Pipeline.Workspace)/evidencias-Foto/foto-settings.json' `
           -OutFile (Join-Path $out 'resumen.md')
         if ($LASTEXITCODE -ne 0) { throw "New-ReleaseResumen.ps1 termino con codigo $LASTEXITCODE" }
         Copy-Item -LiteralPath $todas -Destination (Join-Path $out 'evidencias') -Recurse
@@ -1079,6 +1080,7 @@ stages:
           -Resultado Verde `
           -EvidenciasDir $todas `
           -StageResults $json `
+          -FotoSettingsPath '$(Pipeline.Workspace)/evidencias-Foto/foto-settings.json' `
           -OutFile (Join-Path $out 'resumen.md')
         if ($LASTEXITCODE -ne 0) { throw "New-ReleaseResumen.ps1 termino con codigo $LASTEXITCODE" }
         Copy-Item -LiteralPath $todas -Destination (Join-Path $out 'evidencias') -Recurse
@@ -1144,6 +1146,7 @@ stages:
     - download: current
       artifact: evidencias-Foto
     - task: AzureCLI@2
+      name: restoreBd
       displayName: Restore-ReleaseFotoBd.ps1
       inputs:
         azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
@@ -1156,6 +1159,9 @@ stages:
             -BuildId '$(Build.BuildId)' `
             -OutDir '$(evidenciasDir)'
           if ($LASTEXITCODE -ne 0) { throw "Restore-ReleaseFotoBd.ps1 termino con codigo $LASTEXITCODE" }
+          # Marca que las tablas se restauraron: Cierre solo registra Revertido con esta salida (la spec liga
+          # Revertido a la restauracion de BD; lo que no se redesplego del codigo lo dice el resumen).
+          Write-Host '##vso[task.setvariable variable=bdRestaurada;isOutput=true]true'
     - task: AzureCLI@2
       displayName: Restore-ReleaseFotoSettings.ps1
       condition: succeededOrFailed()
@@ -1255,11 +1261,12 @@ stages:
       ${{ if ne(parameters.targetEnvironment, 'dev') }}:
         resultadoAltas: $[ stageDependencies.Altas.Apply.result ]
       resultadoVerificacion: $[ stageDependencies.Verificacion.VerifJob.result ]
+      bdRestaurada: $[ dependencies.Restaurar.outputs['restoreBd.bdRestaurada'] ]
     steps:
     - checkout: self
     - task: AzureCLI@2
-      displayName: Set-ReleaseRevertida (solo si la restauracion y los tres despliegues de codigo se revirtieron)
-      condition: and(succeeded(), in(variables['resultadoRestaurar'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirFunctions'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirAdmin'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirAssetResolver'], 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      displayName: Set-ReleaseRevertida (solo si las tablas de BD se restauraron)
+      condition: and(succeeded(), eq(variables['bdRestaurada'], 'true'))
       inputs:
         azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
         scriptType: 'pscore'
@@ -1434,6 +1441,7 @@ stages:
           -Resultado Rojo `
           -EvidenciasDir $todas `
           -StageResults $json `
+          -FotoSettingsPath '$(Pipeline.Workspace)/evidencias-Foto/foto-settings.json' `
           -OutFile (Join-Path $out 'resumen.md')
         if ($LASTEXITCODE -ne 0) { throw "New-ReleaseResumen.ps1 termino con codigo $LASTEXITCODE" }
         Copy-Item -LiteralPath $todas -Destination (Join-Path $out 'evidencias') -Recurse
