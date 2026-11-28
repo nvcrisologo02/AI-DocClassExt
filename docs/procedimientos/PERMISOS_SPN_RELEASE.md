@@ -125,7 +125,7 @@ La stage `Guard` ejecuta `scripts/release/Test-ReleasePermisos.ps1` (lo invoca `
 | Function App: claves de función | `az functionapp keys list` (solo la longitud de `masterKey`) | lectura de claves de función | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
 | Function App: estado | `az functionapp show` | lectura y reinicio de la Function App | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
 | Acceso SQL | `SELECT 1` en la base `DocumentIA` del servidor del entorno (`SQL_SERVER_NAME`) | `db_datareader` y `db_datawriter` (`grant-pipeline-sql-user.sql`) | `srbsqldevdocai` | `srbsqlpredocai` | `srbsqlprodocai` |
-| Kudu alcanzable (las tres apps) | `GET https://<app>.scm.azurewebsites.net/api/settings` con token de Entra (Bearer), tiempo máximo 30 s | Contributor sobre el resource group | las tres apps de dev | las tres apps de pre | las tres apps de prod |
+| Kudu alcanzable (las tres apps) | `GET https://<app>.scm.azurewebsites.net/api/settings` con token de Entra (Bearer), tiempo máximo 60 s por intento y un reintento tras 15 s | Contributor sobre el resource group | las tres apps de dev | las tres apps de pre | las tres apps de prod |
 
 Reparto por job: las lecturas de Key Vault, storage y SQL corren en `GuardJob` (pool privado `docia-mdp-private`, con `-SinKudu`). La comprobación de Kudu corre en `GuardKudu` (agente alojado `windows-latest`, con `-SoloKudu`), porque el `scm` de las apps no resuelve desde el pool privado. La stage falla si falla cualquiera de los dos.
 

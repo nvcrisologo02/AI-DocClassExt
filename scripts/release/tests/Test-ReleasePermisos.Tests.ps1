@@ -18,6 +18,30 @@ Describe 'Test-ReleasePermisos' {
         Mock Invoke-WebRequest { [pscustomobject]@{ StatusCode = 200 } }
         Mock Invoke-ReleaseSql { 1 }
         Mock Get-ReleaseKuduToken { 'TOKEN-KUDU-XYZ' }
+        Mock Start-Sleep { }
+        $global:T3Intentos = 0
+    }
+    AfterAll { Remove-Variable -Name T3Intentos -Scope Global -ErrorAction SilentlyContinue }
+
+    It 'Kudu reintenta una vez tras 15 s: un fallo transitorio seguido de un 200 es correcto' {
+        $global:T3Intentos = 0
+        Mock Invoke-WebRequest {
+            $global:T3Intentos++
+            if ($global:T3Intentos -eq 1) { throw 'The request was canceled due to the configured HttpClient.Timeout' }
+            [pscustomobject]@{ StatusCode = 200 }
+        }
+        $out = & $script:permisos -Environment dev -SqlServer srbsqldevdocai -SoloKudu 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0
+        Should -Invoke Start-Sleep -Times 1 -Exactly -ParameterFilter { $Seconds -eq 15 }
+        $out | Should -Not -Match 'Kudu srbappdevdocai'
+    }
+
+    It 'Kudu con fallo persistente hace dos intentos por app y falla con el mensaje del ultimo' {
+        Mock Invoke-WebRequest { [pscustomobject]@{ StatusCode = 503 } }
+        $out = & $script:permisos -Environment dev -SqlServer srbsqldevdocai -SoloKudu 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        Should -Invoke Invoke-WebRequest -Times 6 -Exactly
+        $out | Should -Match 'Kudu srbappdevdocai: HTTP 503'
     }
 
     It 'falla con exit 2 y nombra el recurso cuando una lectura falla' {
@@ -55,7 +79,7 @@ Describe 'Test-ReleasePermisos' {
         $null = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1
         Should -Invoke Invoke-WebRequest -Times 3 -Exactly -ParameterFilter {
             $Uri -match '^https://(srbappdevdocai|srbwebadmindevdocai|srbwebpluginassetresolverdev)\.scm\.azurewebsites\.net/api/settings$' -and
-            $Headers.Authorization -ceq 'Bearer TOKEN-KUDU-XYZ' -and $TimeoutSec -eq 30 -and $SkipHttpErrorCheck
+            $Headers.Authorization -ceq 'Bearer TOKEN-KUDU-XYZ' -and $TimeoutSec -eq 60 -and $SkipHttpErrorCheck
         }
         Should -Not -Invoke Invoke-WebRequest -ParameterFilter { $Headers.Authorization -like 'Basic*' }
     }

@@ -7,7 +7,7 @@
     (Key Vault, storage de documentos de destino y de origen de la copia, claves de la cuenta del task hub,
     claves y estado de la Function App) mas dos comprobaciones nuevas: Kudu alcanzable (GET
     https://<app>.scm.azurewebsites.net/api/settings con Bearer del token de ARM de la cuenta
-    activa de az, las tres apps; la autenticacion basica de SCM esta deshabilitada y no se
+    activa de az, las tres apps, con un reintento tras 15 s si falla el primer intento de 60 s; la autenticacion basica de SCM esta deshabilitada y no se
     reactiva, por eso ya no se leen credenciales de publicacion) y acceso SQL (SELECT 1).
 
     Nunca imprime secretos: el token de Entra solo se usa en la cabecera Authorization de la peticion a
@@ -96,18 +96,24 @@ function Test-KuduAlcanzable([string]$App) {
         Write-Host "Kudu ${App}: sin token de Entra"
         return $false
     }
-    try {
-        $resp = Invoke-WebRequest -UseBasicParsing -Method Get -TimeoutSec 30 -SkipHttpErrorCheck -Uri "https://$App.scm.azurewebsites.net/api/settings" -Headers @{ Authorization = "Bearer $($script:TokenKudu)" }
-        if ([int]$resp.StatusCode -eq 200) { return $true }
-        Write-Host "Kudu ${App}: HTTP $([int]$resp.StatusCode)"
-        return $false
+    # Hasta dos intentos (60 s de tiempo maximo cada uno, 15 s de pausa): un timeout transitorio del
+    # scm no debe dejar un rojo sin causa real. Solo se escribe el mensaje del ultimo intento.
+    $mensaje = ''
+    for ($intento = 1; $intento -le 2; $intento++) {
+        try {
+            $resp = Invoke-WebRequest -UseBasicParsing -Method Get -TimeoutSec 60 -SkipHttpErrorCheck -Uri "https://$App.scm.azurewebsites.net/api/settings" -Headers @{ Authorization = "Bearer $($script:TokenKudu)" }
+            if ([int]$resp.StatusCode -eq 200) { return $true }
+            $mensaje = "Kudu ${App}: HTTP $([int]$resp.StatusCode)"
+        }
+        catch {
+            $m = [string]$_.Exception.Message
+            if ($m.Length -gt 200) { $m = $m.Substring(0, 200) }
+            $mensaje = "Kudu ${App}: $m"
+        }
+        if ($intento -lt 2) { Start-Sleep -Seconds 15 }
     }
-    catch {
-        $m = [string]$_.Exception.Message
-        if ($m.Length -gt 200) { $m = $m.Substring(0, 200) }
-        Write-Host "Kudu ${App}: $m"
-        return $false
-    }
+    Write-Host $mensaje
+    return $false
 }
 
 if (-not $SoloKudu) {
