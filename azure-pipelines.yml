@@ -157,8 +157,13 @@ stages:
           runOnce:
             deploy:
               steps:
-                # Despliega la Function App, aplica sus app settings y verifica los decisivos.
+                # Despliega el codigo de la Function App (zipDeploy).
                 - template: pipelines/templates/steps/deploy-functions.yml
+                  parameters:
+                    serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+                    functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+                # Aplica los app settings de la Function App y verifica los decisivos.
+                - template: pipelines/templates/steps/functions-settings.yml
                   parameters:
                     serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
                     functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'

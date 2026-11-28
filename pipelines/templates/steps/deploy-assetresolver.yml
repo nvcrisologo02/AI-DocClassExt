@@ -10,12 +10,18 @@ parameters:
     type: string
   - name: keyVaultName
     type: string
+  - name: artifactName
+    type: string
+    default: drop-assetresolver
+  - name: packagePath
+    type: string
+    default: $(Pipeline.Workspace)/drop-assetresolver
 
 steps:
 - checkout: self
 
 - download: current
-  artifact: drop-assetresolver
+  artifact: ${{ parameters.artifactName }}
 
 - task: AzureWebApp@1
   displayName: Deploy AssetResolver Web App
@@ -23,7 +29,7 @@ steps:
     azureSubscription: ${{ parameters.serviceConnection }}
     appType: webApp
     appName: ${{ parameters.assetResolverWebAppName }}
-    package: $(Pipeline.Workspace)/drop-assetresolver
+    package: ${{ parameters.packagePath }}
     deploymentMethod: zipDeploy
 
 - task: AzureCLI@2

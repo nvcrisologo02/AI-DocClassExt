@@ -29,6 +29,7 @@ BeforeAll {
     New-TestFile $fixtures 'scripts/storage/copy-embeddings-artifacts.ps1' $stubPs1
     New-TestFile $fixtures 'scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql' 'SELECT 1;'
     New-TestFile $fixtures 'releases/_ensayo/ensayo-dev.sql' 'SELECT 1;'
+    New-TestFile $fixtures 'releases/_ensayo/ensayo-dev.ps1' $stubPs1
     New-TestFile $fixtures 'releases/CURRENT' "v1.2.0 `r`n"
     New-Item -ItemType Directory -Force -Path (Join-Path $fixtures 'releases/v1.2.0') | Out-Null
     Copy-Item (Join-Path $script:repo 'releases/v1.2.0/release.json') (Join-Path $fixtures 'releases/v1.2.0/release.json') -Force
@@ -82,7 +83,7 @@ Describe 'Get-ReleaseManifest' {
         $m.manifestPath | Should -Match '_ensayo'
         $m.version | Should -Be '_ensayo'
         $m.embeddings | Should -BeNullOrEmpty
-        $m.pasos.Count | Should -Be 1
+        $m.pasos.Count | Should -Be 2
     }
     It 'filtra los pasos por entorno' {
         $sql07 = 'scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql'

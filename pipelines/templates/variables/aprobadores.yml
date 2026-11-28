@@ -1,0 +1,6 @@
+# Aprobadores de la pipeline Release (enmienda 2026-11-27 de la spec). Cambiarlos es un commit en este fichero.
+variables:
+  - name: aprobador1
+    value: ignacio.varas@sareb.es
+  - name: aprobador2
+    value: ignacio.varas@sareb.es

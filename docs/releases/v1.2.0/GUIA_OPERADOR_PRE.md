@@ -1,5 +1,7 @@
 # Guía del operador: despliegue en PRE de la release v1.2.0
 
+> Camino de respaldo: la Fase 2 se ejecuta con la pipeline Release (id 842, `azure-pipelines-release.yml`; descripción en `pipelines/README.md`). Esta guía queda para los casos en que no se pueda usar la pipeline; sus pasos no se han reescrito y se revisarán en el hito 3.
+
 Fecha de la guía: 2026-11-26 · Candidato: HEAD de `develop` en origin al abrir la ventana (`4c539936` a esta fecha; el código de `src/` no cambia desde `bc41f289`) · Registro: [release.md](release.md) · Runbook: [runbook.md](runbook.md) · Procedimiento oficial: [RELEASE_MANAGEMENT.md](../../procedimientos/RELEASE_MANAGEMENT.md)
 
 ## Cómo usar esta guía

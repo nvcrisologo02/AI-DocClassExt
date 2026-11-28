@@ -7,7 +7,7 @@ Convención que lee la pipeline `Release` (stage `Guard`) para saber qué se des
 - `CURRENT`: una línea con la versión en curso (`v1.2.0`). Se toleran espacios y salto de línea final (LF o CRLF).
 - `release.schema.json`: contrato del manifiesto (JSON Schema draft 2020-12). Es documentación; la validación real la hace `scripts/release/Test-ReleaseManifest.ps1` con comprobaciones en PowerShell, sin dependencias externas.
 - `<version>/release.json`: manifiesto de cada versión (`v1.2.0/`).
-- `_ensayo/`: release de ensayo para probar la pipeline en `dev` sin tocar una versión real.
+- `_ensayo/`: release de ensayo para probar la pipeline en `dev` sin tocar una versión real. Lleva un paso `sql` (`ensayo-dev.sql`) y un paso `ps1` (`ensayo-dev.ps1`, imprime el entorno y la suscripción, sin efectos).
 
 ## Manifiesto
 
@@ -34,6 +34,7 @@ Reglas cruzadas que valida `Test-ReleaseManifest.ps1`:
 - `pre` y `prod` usan `releases/<contenido de CURRENT>/release.json`.
 - Solo se devuelven los pasos cuyo `entornos` contiene el entorno pedido.
 - `_ensayo` solo puede declarar `entornos: ["dev"]`.
+- `_ensayo` ignora el registro `ReleaseAplicada` al decidir qué pasos aplicar: se escribe igual con el BuildId, pero no se consulta, para poder repetir el ensayo en `dev` sin tocar la BD a mano (decisión 2 del plan del hito 2).
 
 ## Scripts
 

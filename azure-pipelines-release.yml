@@ -1,0 +1,1461 @@
+name: Release-$(Date:yyyyMMdd)$(Rev:.r)
+
+# Pipeline Release de un boton (AB#101583, hito 2; spec 2026-11-26-pipeline-release-un-boton-design.md y
+# su enmienda del 2026-11-27, ADR-007 y ADR-008). Una ejecucion = una release de un entorno:
+#
+#   Guard -> (Build y Aprobacion en paralelo) -> Foto -> Migraciones -> IA -> Codigo -> Configuracion
+#         -> Altas (solo pre y prod) -> Verificacion -> Fin
+#   VueltaAtras: solo si falla alguna stage de Migraciones a Verificacion habiendo pasado Foto.
+#   FotoFallida: solo si falla Foto; rehabilita la ingesta.
+#
+# Reglas de composicion:
+#   - Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008). Las dos aprobaciones son los jobs
+#     ManualValidation@1 de la stage Aprobacion (agentless).
+#   - Los bloques de trabajo son los step templates de pipelines/templates/steps/ (los mismos que
+#     componen el 799, 807 y 832); la logica propia de la release esta en scripts/release/.
+#   - La version de la release la lee Guard del manifiesto (releases/CURRENT; en dev, releases/_ensayo) y
+#     llega a cada job como variable releaseTag. Se pasa a los templates como macro '$(releaseTag)', que se
+#     expande al ejecutar el paso, de modo que los ficheros de db-config se llaman
+#     config-<version>-<origen>.sql.
+#   - Las variables de salida de Guard (version, manifestPath, yaAplicada, ignorarRegistro) se leen con
+#     stageDependencies.Guard.GuardJob.outputs['guard.<variable>'] en variables de job y con
+#     dependencies.Guard.outputs['GuardJob.guard.<variable>'] en condiciones de stage. Por eso toda stage
+#     que las usa lista Guard en dependsOn (las salidas solo llegan a una stage que depende de forma directa).
+#   - Los resultados de stage se leen con dependencies.<Stage>.result en condiciones de stage, y con el
+#     resultado del ultimo job de la stage (stageDependencies.<Stage>.<Job>.result) en variables de job.
+#   - Evidencias: cada stage deja ficheros en $(Build.ArtifactStagingDirectory)/evidencias y los publica
+#     como evidencias-<stage>. Fin y VueltaAtras los reunen en release-<env>-<build> junto a resumen.md.
+#   - Nada se despliega ni se escribe en un entorno hasta que las dos aprobaciones se conceden.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: targetEnvironment
+    displayName: Entorno destino (dev solo para ensayos)
+    type: string
+    default: dev
+    values:
+      - dev
+      - pre
+      - prod
+  # 'ninguna' = sin fallo simulado (Azure DevOps no admite la cadena vacia en values). Donde se pasa el
+  # valor se convierte a '' con replace(); Guard rechaza un valor distinto de ninguna fuera de dev.
+  - name: simularFalloEn
+    displayName: 'Solo dev: fuerza un fallo en esa stage para ensayar la vuelta atras (ninguna = sin fallo)'
+    type: string
+    default: ninguna
+    values:
+      - ninguna
+      - Migraciones
+      - IA
+      - Codigo
+      - Configuracion
+      - Altas
+      - Verificacion
+
+variables:
+  # Variables por entorno (conexion, recursos, SQL, task hub, valores de configuracion).
+  - template: pipelines/templates/variables/entorno.yml
+    parameters:
+      environment: ${{ parameters.targetEnvironment }}
+  # Endpoints de IA por entorno (AI_*).
+  - template: infra/ai/pipeline-variables.yml
+    parameters:
+      targetEnvironment: ${{ parameters.targetEnvironment }}
+  # aprobador1 y aprobador2 de la stage Aprobacion.
+  - template: pipelines/templates/variables/aprobadores.yml
+
+  # Constantes del 799 (azure-pipelines.yml), sin cambiar valores.
+  - name: buildConfiguration
+    value: Release
+  - name: solutionPath
+    value: src/backend/DocumentIA.sln
+  - name: functionsProject
+    value: src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
+  - name: adminProject
+    value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
+  - name: assetResolverProject
+    value: src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj
+  - name: testsProject
+    value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
+  - name: gdcTimeoutSeconds
+    value: '60'
+  - name: cuMaxConcurrentCalls
+    value: '4'
+  - name: cuHardTimeoutSeconds
+    value: '90'
+  - name: cuEnableCircuitBreaker
+    value: 'true'
+  - name: cuCircuitBreakerFailureThreshold
+    value: '5'
+  - name: cuCircuitBreakerOpenSeconds
+    value: '45'
+  - name: cuMaxRetries
+    value: '3'
+  - name: cuInitialRetryDelayMs
+    value: '500'
+  - name: promptTracingEnabled
+    value: 'true'
+  - name: promptTracingIncludePromptText
+    value: 'true'
+  - name: promptTracingMaxPromptTextChars
+    value: '20000'
+  - name: dedupModoEstricto
+    value: 'true'
+  - name: gcHeapHardLimitPercent
+    value: '28'
+  - name: blobRetentionCleanupCron
+    value: '0 0 3 * * *'
+  - name: blobRetentionDefaultDays
+    value: '2'
+  - name: manageKeyVaultRbac
+    value: 'false'
+
+  # Constantes del 832 (azure-pipelines-ai-artifacts.yml).
+  - name: sqlDatabaseName
+    value: DocumentIA
+  - name: promotionServiceConnection
+    value: AI DocClassExt Promocion IA
+  - name: cuSecondaryAnalyzers
+    value: CU_NS_1.5_0,CU_NS_1.6_0_GGAA
+
+  # Propias de la release.
+  - name: evidenciasDir
+    value: $(Build.ArtifactStagingDirectory)/evidencias
+  - name: healthUrl
+    value: https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/healthcheck
+
+  # Origen del salto, como en el 832: pre <- dev, prod <- pre. En dev no hay salto anterior: se recupera
+  # desde PRO con -FromProd y en ensayo (-DryRun), igual que lanzar el 832 con fromProd y dryRun.
+  # lifecycleAlias es el alias de entorno de set-lifecycle-documents-clasif.ps1 (pro, no prod).
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: sourceEnvironment
+      value: prod
+    - name: sourceServiceConnection
+      value: AI DocClassExt PRO
+    - name: sourceSqlServer
+      value: srbsqlprodocai
+    - name: routeArgs
+      value: -Environment dev -SourceEnvironment prod -FromProd
+    - name: dryRunArg
+      value: -DryRun
+    - name: lifecycleAlias
+      value: dev
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: sourceEnvironment
+      value: dev
+    - name: sourceServiceConnection
+      value: AI DocClassExt DEV
+    - name: sourceSqlServer
+      value: srbsqldevdocai
+    - name: routeArgs
+      value: -Environment pre
+    - name: dryRunArg
+      value: ''
+    - name: lifecycleAlias
+      value: pre
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: sourceEnvironment
+      value: pre
+    - name: sourceServiceConnection
+      value: AI DocClassExt PRE
+    - name: sourceSqlServer
+      value: srbsqlpredocai
+    - name: routeArgs
+      value: -Environment prod
+    - name: dryRunArg
+      value: ''
+    - name: lifecycleAlias
+      value: pro
+
+# Pool por defecto: privado (llega a SQL y a los storages por red privada). Build, Generate y Validate
+# usan windows-latest, como en el 799 y el 807; Aprobacion es agentless.
+pool:
+  name: docia-mdp-private
+
+stages:
+# ------------------------------------------------------------------------------------------------
+# 1. Guard: solo lectura. Rama, manifiesto, aprobadores, simulacion, registro y permisos.
+# ------------------------------------------------------------------------------------------------
+- stage: Guard
+  displayName: Guard
+  dependsOn: []
+  jobs:
+  - job: GuardJob
+    displayName: Comprobar la release de ${{ parameters.targetEnvironment }}
+    timeoutInMinutes: 15
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      name: guard
+      displayName: Invoke-ReleaseGuard.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Emite las variables de salida version, manifestPath, yaAplicada e ignorarRegistro.
+          # -SinKudu: el scm de las apps no resuelve desde el pool privado; lo comprueba GuardKudu (hosted).
+          pwsh -NoProfile -File ./scripts/release/Invoke-ReleaseGuard.ps1 `
+            -SinKudu `
+            -Environment '${{ parameters.targetEnvironment }}' `
+            -SourceBranch '$(Build.SourceBranch)' `
+            -RepoRoot '$(Build.SourcesDirectory)' `
+            -SqlServer '$(SQL_SERVER_NAME)' `
+            -AprobadoresPath 'pipelines/templates/variables/aprobadores.yml' `
+            -SimularFalloEn '${{ replace(parameters.simularFalloEn, 'ninguna', '') }}'
+          if ($LASTEXITCODE -ne 0) { throw "Invoke-ReleaseGuard.ps1 termino con codigo $LASTEXITCODE" }
+  # Kudu (scm) de las tres apps con el token de Entra. Corre en un agente alojado: desde el pool privado
+  # el scm de la Function App no resuelve (endpoint privado sin enlace DNS a la VNet del pool). La stage
+  # Guard falla si falla cualquiera de los dos jobs. No produce variables de salida.
+  - job: GuardKudu
+    displayName: Comprobar Kudu de ${{ parameters.targetEnvironment }} (agente alojado)
+    timeoutInMinutes: 10
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Test-ReleasePermisos.ps1 -SoloKudu
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Test-ReleasePermisos.ps1 `
+            -Environment '${{ parameters.targetEnvironment }}' `
+            -SqlServer '$(SQL_SERVER_NAME)' `
+            -SoloKudu
+          if ($LASTEXITCODE -ne 0) { throw "Test-ReleasePermisos.ps1 -SoloKudu termino con codigo $LASTEXITCODE" }
+
+# ------------------------------------------------------------------------------------------------
+# 2. Build: compila y prueba. Corre en paralelo a la espera de aprobacion; Foto espera a los dos.
+#    Si Guard dice que la version ya esta aplicada, se salta (y con ella todo lo demas).
+# ------------------------------------------------------------------------------------------------
+- stage: Build
+  displayName: Build & Test
+  dependsOn: Guard
+  condition: and(succeeded(), eq(dependencies.Guard.outputs['GuardJob.guard.yaAplicada'], 'false'))
+  jobs:
+  - job: BuildJob
+    displayName: Build solution
+    timeoutInMinutes: 60
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
+    - template: pipelines/templates/steps/build-solucion.yml
+      parameters:
+        solutionPath: '$(solutionPath)'
+        buildConfiguration: '$(buildConfiguration)'
+        testsProject: '$(testsProject)'
+        functionsProject: '$(functionsProject)'
+        adminProject: '$(adminProject)'
+        assetResolverProject: '$(assetResolverProject)'
+
+# ------------------------------------------------------------------------------------------------
+# 3. Aprobacion: dos validaciones manuales al principio (enmienda 2026-11-27). Jobs agentless.
+#    Rechazo o tiempo agotado: el run acaba en rojo sin haber tocado nada.
+# ------------------------------------------------------------------------------------------------
+- stage: Aprobacion
+  displayName: Aprobacion
+  dependsOn: Guard
+  condition: and(succeeded(), eq(dependencies.Guard.outputs['GuardJob.guard.yaAplicada'], 'false'))
+  jobs:
+  - job: Aprobacion1
+    displayName: Primera aprobacion
+    pool: server
+    timeoutInMinutes: 10200
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+    steps:
+    - task: ManualValidation@1
+      displayName: Aprobacion 1 de 2
+      timeoutInMinutes: 10080
+      inputs:
+        notifyUsers: '$(aprobador1)'
+        approvers: '$(aprobador1)'
+        allowApproversToApproveTheirOwnRuns: true
+        onTimeout: reject
+        instructions: |
+          Release de DocumentIA a ${{ parameters.targetEnvironment }} (aprobacion 1 de 2).
+          Version: $(releaseTag)
+          Commit: $(Build.SourceVersion)
+          Rama: $(Build.SourceBranch)
+          Aprobar significa que el run despliega este commit, no el que haya en la rama al aprobar.
+  - job: Aprobacion2
+    displayName: Segunda aprobacion
+    dependsOn: Aprobacion1
+    pool: server
+    timeoutInMinutes: 10200
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+    steps:
+    - task: ManualValidation@1
+      displayName: Aprobacion 2 de 2
+      timeoutInMinutes: 10080
+      inputs:
+        notifyUsers: '$(aprobador2)'
+        approvers: '$(aprobador2)'
+        allowApproversToApproveTheirOwnRuns: true
+        onTimeout: reject
+        ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+          instructions: |
+            Release de DocumentIA a ${{ parameters.targetEnvironment }} (aprobacion 2 de 2).
+            Version: $(releaseTag)
+            Commit: $(Build.SourceVersion)
+            Rama: $(Build.SourceBranch)
+            Aprobar significa que el run despliega este commit, no el que haya en la rama al aprobar.
+            Confirma que las cuatro puertas de PRE estan en PASS y el Smoke publicado en el Test Plan 100069 (RELEASE_MANAGEMENT 2.5).
+        ${{ else }}:
+          instructions: |
+            Release de DocumentIA a ${{ parameters.targetEnvironment }} (aprobacion 2 de 2).
+            Version: $(releaseTag)
+            Commit: $(Build.SourceVersion)
+            Rama: $(Build.SourceBranch)
+            Aprobar significa que el run despliega este commit, no el que haya en la rama al aprobar.
+
+# ------------------------------------------------------------------------------------------------
+# 4. Foto: mantenimiento, drenado y foto de las capas que la release toca (settings, BD y codigo).
+#    Espera tambien a Build: si el build falla no se llega a abrir la ventana.
+# ------------------------------------------------------------------------------------------------
+- stage: Foto
+  displayName: Foto
+  dependsOn:
+    - Aprobacion
+    - Build
+  jobs:
+  - job: FotoJob
+    displayName: Foto de ${{ parameters.targetEnvironment }}
+    timeoutInMinutes: 75
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Save-ReleaseFotoSettings.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Save-ReleaseFotoSettings.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -OutDir '$(evidenciasDir)'
+          if ($LASTEXITCODE -ne 0) { throw "Save-ReleaseFotoSettings.ps1 termino con codigo $LASTEXITCODE" }
+    - task: AzureCLI@2
+      displayName: Set-ReleaseIngesta.ps1 -Estado Pausada
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Set-ReleaseIngesta.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -Estado Pausada
+          if ($LASTEXITCODE -ne 0) { throw "Set-ReleaseIngesta.ps1 -Estado Pausada termino con codigo $LASTEXITCODE" }
+    - task: AzureCLI@2
+      displayName: Wait-ReleaseTaskHubDrenado.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Wait-ReleaseTaskHubDrenado.ps1 -StorageAccount '$(TASKHUB_STORAGE_ACCOUNT)'
+          $codigoDrenado = $LASTEXITCODE
+          if ($codigoDrenado -ne 0) {
+            # 3 = tiempo agotado sin drenar; 2 = no se pudo leer la tabla. En ambos casos no se ha tocado nada mas.
+            Write-Host "El drenado termino con codigo $codigoDrenado; se rehabilita la ingesta."
+            pwsh -NoProfile -File ./scripts/release/Set-ReleaseIngesta.ps1 `
+              -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+              -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+              -Estado Activa
+            throw "Wait-ReleaseTaskHubDrenado.ps1 termino con codigo $codigoDrenado (3 = tiempo agotado)"
+          }
+    - task: AzureCLI@2
+      displayName: New-ReleaseFotoBd.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/New-ReleaseFotoBd.ps1 `
+            -Server '$(SQL_SERVER_NAME)' `
+            -Database '$(sqlDatabaseName)' `
+            -BuildId '$(Build.BuildId)' `
+            -OutDir '$(evidenciasDir)'
+          if ($LASTEXITCODE -ne 0) { throw "New-ReleaseFotoBd.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: Foto
+  # Foto del codigo desplegado por Kudu: en un agente alojado (desde el pool privado el scm de las apps
+  # no resuelve). Corre tras FotoJob, es decir, tras el drenado. Su artefacto evidencias-FotoCodigo lleva
+  # foto-codigo/<clave>.zip y foto-codigo/foto-codigo.json; la vuelta atras redespliega desde el.
+  - job: FotoCodigoJob
+    displayName: Foto del codigo de ${{ parameters.targetEnvironment }} (agente alojado)
+    dependsOn: FotoJob
+    timeoutInMinutes: 30
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Save-ReleaseFotoCodigo.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # En proceso (no con pwsh -File): -Apps es una hashtable. Los zips quedan en
+          # evidencias-FotoCodigo/foto-codigo/<clave>.zip (functions, admin, assetresolver).
+          & ./scripts/release/Save-ReleaseFotoCodigo.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -Apps @{ functions = '$(AZURE_FUNCTIONS_APP_NAME)'; admin = '$(AZURE_ADMIN_WEB_APP_NAME)'; assetresolver = '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)' } `
+            -OutDir '$(evidenciasDir)/foto-codigo'
+          if ($LASTEXITCODE -ne 0) { throw "Save-ReleaseFotoCodigo.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: FotoCodigo
+
+# Si Foto falla (p. ej. el drenado no termina), solo se rehabilita la ingesta y se publica el resumen:
+# no se ha tocado ninguna otra capa, no hay nada que deshacer.
+- stage: FotoFallida
+  displayName: Foto fallida
+  dependsOn:
+    - Guard
+    - Foto
+  condition: eq(dependencies.Foto.result, 'Failed')
+  jobs:
+  - job: FotoFallidaJob
+    displayName: Rehabilitar la ingesta y publicar el resumen (agente alojado)
+    timeoutInMinutes: 30
+    # Solo ARM (ingesta) y ficheros de artefactos: agente alojado.
+    pool:
+      vmImage: windows-latest
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+      resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
+      resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Set-ReleaseIngesta.ps1 -Estado Activa
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Set-ReleaseIngesta.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -Estado Activa
+          if ($LASTEXITCODE -ne 0) { throw "Set-ReleaseIngesta.ps1 -Estado Activa termino con codigo $LASTEXITCODE" }
+    - download: current
+      artifact: evidencias-Foto
+      continueOnError: true
+    - download: current
+      artifact: evidencias-FotoCodigo
+      continueOnError: true
+    - pwsh: |
+        $ErrorActionPreference = 'Continue'
+        $ws = '$(Pipeline.Workspace)'
+        $todas = Join-Path $ws 'evidencias-all'
+        New-Item -ItemType Directory -Force -Path $todas | Out-Null
+        foreach ($d in @(Get-ChildItem -LiteralPath $ws -Directory -Filter 'evidencias-*' | Where-Object { $_.Name -ne 'evidencias-all' })) {
+          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' -and $_.Name -ne 'foto-settings.json' })) {
+            $dest = Join-Path $todas (Join-Path $d.Name $f.FullName.Substring($d.FullName.Length).TrimStart('\', '/'))
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+            Copy-Item -LiteralPath $f.FullName -Destination $dest
+          }
+        }
+        $resultados = @(
+          [ordered]@{ nombre = 'Guard'; resultado = '$(resultadoGuard)' },
+          [ordered]@{ nombre = 'Foto'; resultado = '$(resultadoFoto)' },
+          [ordered]@{ nombre = 'FotoCodigo'; resultado = '$(resultadoFotoCodigo)' }
+        )
+        $json = ConvertTo-Json -InputObject $resultados -Compress
+        $out = '$(Build.ArtifactStagingDirectory)/release'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        & ./scripts/release/New-ReleaseResumen.ps1 `
+          -Environment '${{ parameters.targetEnvironment }}' `
+          -Version '$(releaseTag)' `
+          -Commit '$(Build.SourceVersion)' `
+          -BuildId '$(Build.BuildId)' `
+          -Resultado Rojo `
+          -EvidenciasDir $todas `
+          -StageResults $json `
+          -FotoSettingsPath '$(Pipeline.Workspace)/evidencias-Foto/foto-settings.json' `
+          -OutFile (Join-Path $out 'resumen.md')
+        if ($LASTEXITCODE -ne 0) { throw "New-ReleaseResumen.ps1 termino con codigo $LASTEXITCODE" }
+        Copy-Item -LiteralPath $todas -Destination (Join-Path $out 'evidencias') -Recurse
+      displayName: Resumen del run (rojo)
+      condition: succeededOrFailed()
+    - task: PublishPipelineArtifact@1
+      displayName: Publicar release-${{ parameters.targetEnvironment }}-$(Build.BuildId)
+      condition: succeededOrFailed()
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/release'
+        artifact: 'release-${{ parameters.targetEnvironment }}-$(Build.BuildId)'
+
+# ------------------------------------------------------------------------------------------------
+# 5. Migraciones (807): Generate en hosted, Apply en el pool privado.
+# ------------------------------------------------------------------------------------------------
+- stage: Migraciones
+  displayName: Migraciones
+  dependsOn: Foto
+  jobs:
+  - job: Generate
+    displayName: dotnet ef migrations script (idempotent)
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/simular-fallo.yml
+      parameters:
+        stage: Migraciones
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
+    - template: pipelines/templates/steps/migrations-generate.yml
+  - job: Apply
+    displayName: Apply migrations to Azure SQL
+    dependsOn: Generate
+    timeoutInMinutes: 240
+    steps:
+    - template: pipelines/templates/steps/migrations-apply.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+        sqlServerName: '$(SQL_SERVER_NAME)'
+        sqlDatabaseName: '$(sqlDatabaseName)'
+        addTransientFirewallRule: false
+        backfillClaveIntencion: false
+
+# ------------------------------------------------------------------------------------------------
+# 6. IA (832): Export de la config del origen (no en dev) y Promote de los artefactos de IA.
+#    En dev el Promote va con -FromProd -DryRun y sin validacion de analyzers (no hay export).
+# ------------------------------------------------------------------------------------------------
+- stage: IA
+  displayName: IA
+  dependsOn:
+    - Guard
+    - Migraciones
+  jobs:
+  - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+    - job: Export
+      displayName: Export de config del origen (${{ variables.sourceEnvironment }})
+      variables:
+        releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+      steps:
+      - template: pipelines/templates/steps/ai-export.yml
+        parameters:
+          serviceConnection: '$(sourceServiceConnection)'
+          sqlServer: '$(sourceSqlServer)'
+          sqlDatabaseName: '$(sqlDatabaseName)'
+          sourceEnvironment: ${{ variables.sourceEnvironment }}
+          releaseTag: '$(releaseTag)'
+  - job: Promote
+    displayName: Promocionar artefactos de IA
+    ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      dependsOn: Export
+    steps:
+    - template: pipelines/templates/steps/simular-fallo.yml
+      parameters:
+        stage: IA
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
+    - template: pipelines/templates/steps/ai-promote.yml
+      parameters:
+        targetServiceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        promotionServiceConnection: '$(promotionServiceConnection)'
+        targetEnvironment: ${{ parameters.targetEnvironment }}
+        sourceEnvironment: '${{ variables.sourceEnvironment }}'
+        routeArgs: '${{ variables.routeArgs }}'
+        dryRunArg: '${{ variables.dryRunArg }}'
+        runValidation: ${{ ne(parameters.targetEnvironment, 'dev') }}
+        cuSecondaryAnalyzers: '$(cuSecondaryAnalyzers)'
+        artifactName: 'ai-artifacts-${{ parameters.targetEnvironment }}-$(System.JobAttempt)'
+
+# ------------------------------------------------------------------------------------------------
+# 7. Codigo (799): DeployFunctions (codigo y settings, en ese orden: functions-settings.yml no hace
+#    checkout y depende del de deploy-functions.yml), DeployAdmin y DeployAssetResolver, cada uno en su
+#    job, y despues ValidateConfiguration.
+# ------------------------------------------------------------------------------------------------
+- stage: Codigo
+  displayName: Codigo
+  dependsOn:
+    - IA
+    - Build
+  jobs:
+  # Un job por template, como en el 799: cada template trae su checkout: self y, con varios checkouts en un
+  # job, el repo queda en s/<nombre> y fallan las rutas relativas. Agente alojado: zipDeploy va por Kudu y
+  # desde el pool privado el scm no resuelve; todo es ARM o Kudu. Como en el 799, Functions y Admin van en
+  # paralelo y AssetResolver espera a Functions.
+  - job: DeployFunctions
+    displayName: Deploy Functions (codigo y settings)
+    timeoutInMinutes: 60
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/simular-fallo.yml
+      parameters:
+        stage: Codigo
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
+    - template: pipelines/templates/steps/deploy-functions.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+    - template: pipelines/templates/steps/functions-settings.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+        resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+        keyVaultName: '$(KEY_VAULT_NAME)'
+        assetResolverBaseUrl: '$(AZURE_ASSET_RESOLVER_BASE_URL)'
+        aiOpenaiPrimaryEndpoint: '$(AI_OPENAI_PRIMARY_ENDPOINT)'
+        aiCuPrimaryEndpoint: '$(AI_CU_PRIMARY_ENDPOINT)'
+        aiCuSecondaryEndpoint: '$(AI_CU_SECONDARY_ENDPOINT)'
+        aiDiEndpoint: '$(AI_DI_ENDPOINT)'
+        cuMaxConcurrentCalls: '$(cuMaxConcurrentCalls)'
+        cuHardTimeoutSeconds: '$(cuHardTimeoutSeconds)'
+        cuEnableCircuitBreaker: '$(cuEnableCircuitBreaker)'
+        cuCircuitBreakerFailureThreshold: '$(cuCircuitBreakerFailureThreshold)'
+        cuCircuitBreakerOpenSeconds: '$(cuCircuitBreakerOpenSeconds)'
+        cuMaxRetries: '$(cuMaxRetries)'
+        cuInitialRetryDelayMs: '$(cuInitialRetryDelayMs)'
+        promptTracingEnabled: '$(promptTracingEnabled)'
+        promptTracingIncludePromptText: '$(promptTracingIncludePromptText)'
+        promptTracingMaxPromptTextChars: '$(promptTracingMaxPromptTextChars)'
+        gdcEndpoint: '$(GDC_ENDPOINT)'
+        diUseInlineContent: '$(DI_USE_INLINE_CONTENT)'
+        dedupModoEstricto: '$(dedupModoEstricto)'
+        promptDefaultsModelKey: '$(PROMPT_DEFAULTS_MODEL_KEY)'
+        gcHeapHardLimitPercent: '$(gcHeapHardLimitPercent)'
+        blobRetentionCleanupCron: '$(blobRetentionCleanupCron)'
+        blobRetentionDefaultDays: '$(blobRetentionDefaultDays)'
+        blobRetentionBatchSize: '$(BLOB_RETENTION_BATCH_SIZE)'
+        gdcTimeoutSeconds: '$(gdcTimeoutSeconds)'
+        environmentName: '$(ENVIRONMENT_NAME)'
+  - job: DeployAdmin
+    displayName: Deploy Admin
+    timeoutInMinutes: 60
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/deploy-admin.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        adminWebAppName: '$(AZURE_ADMIN_WEB_APP_NAME)'
+        functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+        resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+        keyVaultName: '$(KEY_VAULT_NAME)'
+        manageKeyVaultRbac: '$(manageKeyVaultRbac)'
+        targetEnvironment: ${{ parameters.targetEnvironment }}
+  - job: DeployAssetResolver
+    displayName: Deploy AssetResolver
+    dependsOn: DeployFunctions
+    timeoutInMinutes: 60
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/deploy-assetresolver.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        assetResolverWebAppName: '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)'
+        resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+        keyVaultName: '$(KEY_VAULT_NAME)'
+  - job: Validate
+    displayName: Validate Azure configuration contract
+    dependsOn:
+      - DeployFunctions
+      - DeployAdmin
+      - DeployAssetResolver
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/validate-configuration.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+        functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+        adminWebAppName: '$(AZURE_ADMIN_WEB_APP_NAME)'
+        assetResolverWebAppName: '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)'
+
+# ------------------------------------------------------------------------------------------------
+# 8. Configuracion: pasos del manifiesto, secretos heredados de Key Vault, ciclo de vida del
+#    storage y reinicio con health.
+# ------------------------------------------------------------------------------------------------
+- stage: Configuracion
+  displayName: Configuracion
+  dependsOn:
+    - Guard
+    - Codigo
+  jobs:
+  - job: ConfigJob
+    displayName: Pasos del manifiesto y ajustes fijos
+    timeoutInMinutes: 60
+    variables:
+      ignorarRegistro: $[ stageDependencies.Guard.GuardJob.outputs['guard.ignorarRegistro'] ]
+    steps:
+    - template: pipelines/templates/steps/simular-fallo.yml
+      parameters:
+        stage: Configuracion
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Invoke-ReleasePasos.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # La version _ensayo (dev) ignora el registro: guard.ignorarRegistro = true.
+          $extra = @()
+          if ('$(ignorarRegistro)' -eq 'true') { $extra += '-IgnorarRegistro' }
+          pwsh -NoProfile -File ./scripts/release/Invoke-ReleasePasos.ps1 `
+            -Environment '${{ parameters.targetEnvironment }}' `
+            -RepoRoot '$(Build.SourcesDirectory)' `
+            -SqlServer '$(SQL_SERVER_NAME)' `
+            -SqlDatabase '$(sqlDatabaseName)' `
+            -BuildId '$(Build.BuildId)' `
+            -OutDir '$(evidenciasDir)' `
+            @extra
+          if ($LASTEXITCODE -ne 0) { throw "Invoke-ReleasePasos.ps1 termino con codigo $LASTEXITCODE" }
+    - task: AzureCLI@2
+      displayName: remove-legacy-keyvault-secrets.ps1 (WhatIf y real)
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/configuration/remove-legacy-keyvault-secrets.ps1 -TargetEnvironment '${{ parameters.targetEnvironment }}' -WhatIf
+          if ($LASTEXITCODE -ne 0) { throw "remove-legacy-keyvault-secrets.ps1 -WhatIf termino con codigo $LASTEXITCODE" }
+          pwsh -NoProfile -File ./scripts/configuration/remove-legacy-keyvault-secrets.ps1 -TargetEnvironment '${{ parameters.targetEnvironment }}'
+          if ($LASTEXITCODE -ne 0) { throw "remove-legacy-keyvault-secrets.ps1 termino con codigo $LASTEXITCODE" }
+    - task: AzureCLI@2
+      displayName: set-lifecycle-documents-clasif.ps1 (WhatIf y real)
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment '$(lifecycleAlias)' -WhatIf
+          if ($LASTEXITCODE -ne 0) { throw "set-lifecycle-documents-clasif.ps1 -WhatIf termino con codigo $LASTEXITCODE" }
+          pwsh -NoProfile -File ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment '$(lifecycleAlias)'
+          if ($LASTEXITCODE -ne 0) { throw "set-lifecycle-documents-clasif.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: Configuracion
+  # Reinicio con health: HTTP al host de la Function App, que tiene endpoint privado sin enlace DNS a la
+  # VNet del pool privado. Va en un agente alojado y despues de ConfigJob (que no hace HTTP).
+  - job: ReinicioJob
+    displayName: Reinicio con health (agente alojado)
+    dependsOn: ConfigJob
+    timeoutInMinutes: 30
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Restart-ReleaseFunctionApp.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Restart-ReleaseFunctionApp.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -HealthUrl '$(healthUrl)' `
+            -OutFile '$(evidenciasDir)/health-configuracion.json'
+          if ($LASTEXITCODE -ne 0) { throw "Restart-ReleaseFunctionApp.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: ConfiguracionReinicio
+
+# ------------------------------------------------------------------------------------------------
+# 9. Altas (832 ConfigSeed y ConfigApply, applyMissingConfig=true). No en dev: en dev no hay export
+#    del origen. Seed y Apply son jobs distintos porque Apply descarga el artefacto config-diff.
+# ------------------------------------------------------------------------------------------------
+- ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+  - stage: Altas
+    displayName: Altas de config
+    dependsOn:
+      - Guard
+      - Configuracion
+    jobs:
+    - job: Seed
+      displayName: Diferencias de config y SQL de altas
+      variables:
+        releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+      steps:
+      - template: pipelines/templates/steps/simular-fallo.yml
+        parameters:
+          stage: Altas
+          simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
+      - template: pipelines/templates/steps/config-seed.yml
+        parameters:
+          targetServiceConnection: '$(AZURE_SERVICE_CONNECTION)'
+          targetSqlServer: '$(SQL_SERVER_NAME)'
+          sqlDatabaseName: '$(sqlDatabaseName)'
+          targetResourceGroup: '$(AZURE_RESOURCE_GROUP)'
+          targetFunctionApp: '$(AZURE_FUNCTIONS_APP_NAME)'
+          targetEnvironment: ${{ parameters.targetEnvironment }}
+          sourceEnvironment: '${{ variables.sourceEnvironment }}'
+          applyMissingConfig: true
+          releaseTag: '$(releaseTag)'
+    - job: Apply
+      displayName: Altas por clave natural
+      dependsOn: Seed
+      variables:
+        releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+      steps:
+      - template: pipelines/templates/steps/config-apply.yml
+        parameters:
+          targetServiceConnection: '$(AZURE_SERVICE_CONNECTION)'
+          targetSqlServer: '$(SQL_SERVER_NAME)'
+          sqlDatabaseName: '$(sqlDatabaseName)'
+          targetEnvironment: ${{ parameters.targetEnvironment }}
+          sourceEnvironment: '${{ variables.sourceEnvironment }}'
+          releaseTag: '$(releaseTag)'
+      # config-apply.yml deja su salida en $(Build.ArtifactStagingDirectory)/config-apply y publica su
+      # propio artefacto; aqui se copia a las evidencias lo que New-ReleaseResumen.ps1 busca
+      # (config-apply-<n>/aplicacion.txt y diff-config-*.txt). Sin SQL: solo textos de diff y de aplicacion.
+      - pwsh: |
+          $ErrorActionPreference = 'Continue'
+          $ev = '$(evidenciasDir)'
+          $apply = '$(Build.ArtifactStagingDirectory)/config-apply'
+          $diff = '$(Pipeline.Workspace)/config-diff'
+          $destApply = Join-Path $ev 'config-apply-$(System.JobAttempt)'
+          New-Item -ItemType Directory -Force -Path $destApply | Out-Null
+          if (Test-Path -LiteralPath (Join-Path $apply 'aplicacion.txt')) { Copy-Item -LiteralPath (Join-Path $apply 'aplicacion.txt') -Destination $destApply }
+          foreach ($dir in @($apply, $diff)) {
+            if (Test-Path -LiteralPath $dir) {
+              Get-ChildItem -LiteralPath $dir -File -Filter 'diff-config-*.txt' | Copy-Item -Destination $ev
+            }
+          }
+        displayName: Copiar a evidencias la salida de las altas
+        condition: succeededOrFailed()
+      - template: pipelines/templates/steps/release-publicar-evidencias.yml
+        parameters:
+          stage: Altas
+    # Reinicio con health en agente alojado (HTTP al host privado de la Function App; ver ReinicioJob de Configuracion).
+    - job: ReinicioJob
+      displayName: Reinicio con health (agente alojado)
+      dependsOn: Apply
+      timeoutInMinutes: 30
+      pool:
+        vmImage: windows-latest
+      steps:
+      - checkout: self
+      - task: AzureCLI@2
+        displayName: Restart-ReleaseFunctionApp.ps1
+        inputs:
+          azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+          scriptType: 'pscore'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            pwsh -NoProfile -File ./scripts/release/Restart-ReleaseFunctionApp.ps1 `
+              -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+              -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+              -HealthUrl '$(healthUrl)' `
+              -OutFile '$(evidenciasDir)/health-altas.json'
+            if ($LASTEXITCODE -ne 0) { throw "Restart-ReleaseFunctionApp.ps1 termino con codigo $LASTEXITCODE" }
+      - template: pipelines/templates/steps/release-publicar-evidencias.yml
+        parameters:
+          stage: AltasReinicio
+
+# ------------------------------------------------------------------------------------------------
+# 10. Verificacion: export <version>-<env> (referencia de la puerta 4), diff frente al origen (no en
+#     dev), smoke E2E y publicacion en el Test Plan 100069.
+# ------------------------------------------------------------------------------------------------
+- stage: Verificacion
+  displayName: Verificacion
+  dependsOn:
+    - Guard
+    - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      - Altas
+    - ${{ else }}:
+      - Configuracion
+  jobs:
+  - job: VerifJob
+    displayName: Export y diff
+    timeoutInMinutes: 120
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+    steps:
+    - template: pipelines/templates/steps/simular-fallo.yml
+      parameters:
+        stage: Verificacion
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
+    - checkout: self
+    - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      - download: current
+        artifact: db-config
+    - task: AzureCLI@2
+      displayName: export-config-release.ps1 contra el destino
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # El .sql del export puede llevar claves de ModeloConfigs: se queda en el agente. A las
+          # evidencias solo va el .hashes.json (referencia de la puerta 4).
+          $export = '$(Agent.TempDirectory)/export-verificacion'
+          pwsh -NoProfile -File ./scripts/ai/export-config-release.ps1 `
+            -SourceServer '$(SQL_SERVER_NAME).database.windows.net' `
+            -ReleaseTag '$(releaseTag)-${{ parameters.targetEnvironment }}' `
+            -OutDir $export
+          if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
+          $destino = '$(evidenciasDir)/export'
+          New-Item -ItemType Directory -Force -Path $destino | Out-Null
+          Copy-Item -Path (Join-Path $export '*.hashes.json') -Destination $destino
+    - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      - pwsh: |
+          # Las diferencias no fallan el run (el script sale con 0); un error del script, si.
+          $export = '$(Agent.TempDirectory)/export-verificacion/config-$(releaseTag)-${{ parameters.targetEnvironment }}.sql'
+          $origen = '$(Pipeline.Workspace)/db-config/config-$(releaseTag)-${{ variables.sourceEnvironment }}.sql'
+          New-Item -ItemType Directory -Force -Path '$(evidenciasDir)' | Out-Null
+          $keys = @('ModeloConfigs=Key', 'PromptTemplates=PromptKey+Version', 'Tipologias=Codigo', 'CatalogoTdn1=Codigo', 'CatalogoTdn2=Codigo', 'PluginTipologiaConfigs=TipologiaCodigo')
+          python scripts/database/diff-config-exports.py $export $origen @keys | Tee-Object -FilePath '$(evidenciasDir)/diff-config-$(releaseTag)-${{ variables.sourceEnvironment }}-${{ parameters.targetEnvironment }}.txt'
+          if ($LASTEXITCODE -ne 0) { throw "diff-config-exports.py termino con codigo $LASTEXITCODE" }
+        displayName: Diff de config frente al origen
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: Verificacion
+  # Smoke E2E: HTTP al host de la Function App (endpoint privado sin enlace DNS a la VNet del pool
+  # privado) y a la API de Azure DevOps para el Test Plan. Sin SQL: va en un agente alojado.
+  - job: SmokeJob
+    displayName: Smoke E2E y Test Plan (agente alojado)
+    dependsOn: VerifJob
+    timeoutInMinutes: 120
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Invoke-ReleaseSmoke.ps1
+      env:
+        ADO_TOKEN: $(System.AccessToken)
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # En proceso: el token llega por entorno y no se pasa por linea de comandos ni se imprime.
+          & ./scripts/release/Invoke-ReleaseSmoke.ps1 `
+            -Environment '${{ parameters.targetEnvironment }}' `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -BaseUrl 'https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net' `
+            -RepoRoot '$(Build.SourcesDirectory)' `
+            -Candidate '$(Build.SourceVersion)' `
+            -Version '$(releaseTag)' `
+            -AdoToken $env:ADO_TOKEN `
+            -OutDir '$(evidenciasDir)/smoke'
+          if ($LASTEXITCODE -ne 0) { throw "Invoke-ReleaseSmoke.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: VerificacionSmoke
+
+# ------------------------------------------------------------------------------------------------
+# 11. Fin: solo con todo en verde. Rehabilita la ingesta, registra el cierre de la version y
+#     publica release-<env>-<build> con resumen.md y las evidencias.
+# ------------------------------------------------------------------------------------------------
+- stage: Fin
+  displayName: Fin
+  dependsOn:
+    - Guard
+    - Build
+    - Aprobacion
+    - Foto
+    - Migraciones
+    - IA
+    - Codigo
+    - Configuracion
+    - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      - Altas
+    - Verificacion
+  condition: succeeded()
+  jobs:
+  - job: FinJob
+    displayName: Cierre de la release
+    timeoutInMinutes: 30
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+      resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
+      resultadoBuild: $[ stageDependencies.Build.BuildJob.result ]
+      resultadoAprobacion: $[ stageDependencies.Aprobacion.Aprobacion2.result ]
+      resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
+      resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
+      resultadoIA: $[ stageDependencies.IA.Promote.result ]
+      resultadoCodigo: $[ stageDependencies.Codigo.Validate.result ]
+      resultadoConfiguracion: $[ stageDependencies.Configuracion.ConfigJob.result ]
+      resultadoReinicioConfiguracion: $[ stageDependencies.Configuracion.ReinicioJob.result ]
+      ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+        resultadoAltas: $[ stageDependencies.Altas.Apply.result ]
+        resultadoReinicioAltas: $[ stageDependencies.Altas.ReinicioJob.result ]
+      resultadoVerificacion: $[ stageDependencies.Verificacion.VerifJob.result ]
+      resultadoSmoke: $[ stageDependencies.Verificacion.SmokeJob.result ]
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Set-ReleaseIngesta.ps1 -Estado Activa
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Set-ReleaseIngesta.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -Estado Activa
+          if ($LASTEXITCODE -ne 0) { throw "Set-ReleaseIngesta.ps1 -Estado Activa termino con codigo $LASTEXITCODE" }
+    - task: AzureCLI@2
+      displayName: Register-ReleaseCierre
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          Import-Module (Resolve-Path ./scripts/release/ReleaseCommon.psm1).Path
+          Import-Module (Resolve-Path ./scripts/release/ReleaseRegistro.psm1).Path
+          Register-ReleaseCierre -Server '$(SQL_SERVER_NAME)' -Database '$(sqlDatabaseName)' -Version '$(releaseTag)' -BuildId '$(Build.BuildId)'
+          Write-Host "Cierre de la version $(releaseTag) registrado."
+    - download: current
+      artifact: evidencias-Foto
+    - download: current
+      artifact: evidencias-FotoCodigo
+    - download: current
+      artifact: evidencias-Configuracion
+    - download: current
+      artifact: evidencias-ConfiguracionReinicio
+    - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      - download: current
+        artifact: evidencias-Altas
+      - download: current
+        artifact: evidencias-AltasReinicio
+    - download: current
+      artifact: evidencias-Verificacion
+    - download: current
+      artifact: evidencias-VerificacionSmoke
+    - pwsh: |
+        $ErrorActionPreference = 'Continue'
+        $ws = '$(Pipeline.Workspace)'
+        $todas = Join-Path $ws 'evidencias-all'
+        New-Item -ItemType Directory -Force -Path $todas | Out-Null
+        # Se reunen las evidencias de cada stage sin los zips de la foto del codigo ni foto-settings.json (valores de app settings: solo queda en evidencias-Foto).
+        foreach ($d in @(Get-ChildItem -LiteralPath $ws -Directory -Filter 'evidencias-*' | Where-Object { $_.Name -ne 'evidencias-all' })) {
+          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' -and $_.Name -ne 'foto-settings.json' })) {
+            $dest = Join-Path $todas (Join-Path $d.Name $f.FullName.Substring($d.FullName.Length).TrimStart('\', '/'))
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+            Copy-Item -LiteralPath $f.FullName -Destination $dest
+          }
+        }
+        $resultados = @(
+          [ordered]@{ nombre = 'Guard'; resultado = '$(resultadoGuard)' },
+          [ordered]@{ nombre = 'Build'; resultado = '$(resultadoBuild)' },
+          [ordered]@{ nombre = 'Aprobacion'; resultado = '$(resultadoAprobacion)' },
+          [ordered]@{ nombre = 'Foto'; resultado = '$(resultadoFoto)' },
+          [ordered]@{ nombre = 'FotoCodigo'; resultado = '$(resultadoFotoCodigo)' },
+          [ordered]@{ nombre = 'Migraciones'; resultado = '$(resultadoMigraciones)' },
+          [ordered]@{ nombre = 'IA'; resultado = '$(resultadoIA)' },
+          [ordered]@{ nombre = 'Codigo'; resultado = '$(resultadoCodigo)' },
+          [ordered]@{ nombre = 'Configuracion'; resultado = '$(resultadoConfiguracion)' },
+          [ordered]@{ nombre = 'Configuracion: Reinicio'; resultado = '$(resultadoReinicioConfiguracion)' },
+          [ordered]@{ nombre = 'Verificacion'; resultado = '$(resultadoVerificacion)' },
+          [ordered]@{ nombre = 'Verificacion: Smoke'; resultado = '$(resultadoSmoke)' }
+        )
+        # Altas solo existe fuera de dev (compilacion condicional del YAML).
+        if ('${{ ne(parameters.targetEnvironment, 'dev') }}' -eq 'True') { $resultados += [ordered]@{ nombre = 'Altas'; resultado = '$(resultadoAltas)' }; $resultados += [ordered]@{ nombre = 'Altas: Reinicio'; resultado = '$(resultadoReinicioAltas)' } }
+        $json = ConvertTo-Json -InputObject $resultados -Compress
+        $out = '$(Build.ArtifactStagingDirectory)/release'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        & ./scripts/release/New-ReleaseResumen.ps1 `
+          -Environment '${{ parameters.targetEnvironment }}' `
+          -Version '$(releaseTag)' `
+          -Commit '$(Build.SourceVersion)' `
+          -BuildId '$(Build.BuildId)' `
+          -Resultado Verde `
+          -EvidenciasDir $todas `
+          -StageResults $json `
+          -FotoSettingsPath '$(Pipeline.Workspace)/evidencias-Foto/foto-settings.json' `
+          -OutFile (Join-Path $out 'resumen.md')
+        if ($LASTEXITCODE -ne 0) { throw "New-ReleaseResumen.ps1 termino con codigo $LASTEXITCODE" }
+        Copy-Item -LiteralPath $todas -Destination (Join-Path $out 'evidencias') -Recurse
+      displayName: Resumen del run (verde)
+    - task: PublishPipelineArtifact@1
+      displayName: Publicar release-${{ parameters.targetEnvironment }}-$(Build.BuildId)
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/release'
+        artifact: 'release-${{ parameters.targetEnvironment }}-$(Build.BuildId)'
+
+# ------------------------------------------------------------------------------------------------
+# 12. VueltaAtras: solo si Foto paso y fallo alguna stage de Migraciones a Verificacion. Restaura BD
+#     y settings, redespliega el codigo de la foto (si Codigo llego a empezar), marca el registro
+#     como Revertido, rehabilita la ingesta, reinicia, publica el resumen y deja el run en rojo.
+#     No deshace: migraciones EF, analyzers de CU copiados, secretos heredados borrados, deployments
+#     de IA (aditivos) ni el artefacto de embeddings copiado.
+# ------------------------------------------------------------------------------------------------
+- stage: VueltaAtras
+  displayName: Vuelta atras
+  dependsOn:
+    - Guard
+    - Foto
+    - Migraciones
+    - IA
+    - Codigo
+    - Configuracion
+    - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      - Altas
+    - Verificacion
+  # Foto paso y fallo alguna stage de Migraciones a Verificacion. dependencies.<Stage>.result en lugar de
+  # failed('<Stage>'): failed() con argumentos solo esta documentado para nombres de job.
+  ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+    condition: |
+      and(
+        in(dependencies.Foto.result, 'Succeeded', 'SucceededWithIssues'),
+        or(
+          eq(dependencies.Migraciones.result, 'Failed'),
+          eq(dependencies.IA.result, 'Failed'),
+          eq(dependencies.Codigo.result, 'Failed'),
+          eq(dependencies.Configuracion.result, 'Failed'),
+          eq(dependencies.Altas.result, 'Failed'),
+          eq(dependencies.Verificacion.result, 'Failed')
+        )
+      )
+  ${{ else }}:
+    condition: |
+      and(
+        in(dependencies.Foto.result, 'Succeeded', 'SucceededWithIssues'),
+        or(
+          eq(dependencies.Migraciones.result, 'Failed'),
+          eq(dependencies.IA.result, 'Failed'),
+          eq(dependencies.Codigo.result, 'Failed'),
+          eq(dependencies.Configuracion.result, 'Failed'),
+          eq(dependencies.Verificacion.result, 'Failed')
+        )
+      )
+  jobs:
+  - job: Restaurar
+    displayName: Restaurar BD y app settings
+    timeoutInMinutes: 90
+    steps:
+    - checkout: self
+    - download: current
+      artifact: evidencias-Foto
+    - task: AzureCLI@2
+      name: restoreBd
+      displayName: Restore-ReleaseFotoBd.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Restore-ReleaseFotoBd.ps1 `
+            -Server '$(SQL_SERVER_NAME)' `
+            -Database '$(sqlDatabaseName)' `
+            -BuildId '$(Build.BuildId)' `
+            -OutDir '$(evidenciasDir)'
+          if ($LASTEXITCODE -ne 0) { throw "Restore-ReleaseFotoBd.ps1 termino con codigo $LASTEXITCODE" }
+          # Marca que las tablas se restauraron: Cierre solo registra Revertido con esta salida (la spec liga
+          # Revertido a la restauracion de BD; lo que no se redesplego del codigo lo dice el resumen).
+          Write-Host '##vso[task.setvariable variable=bdRestaurada;isOutput=true]true'
+    - task: AzureCLI@2
+      displayName: Restore-ReleaseFotoSettings.ps1
+      condition: succeededOrFailed()
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Restore-ReleaseFotoSettings.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -InFile '$(Pipeline.Workspace)/evidencias-Foto/foto-settings.json'
+          if ($LASTEXITCODE -ne 0) { throw "Restore-ReleaseFotoSettings.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: VueltaAtras
+  # El codigo solo se redespliega si su job de Codigo llego a ejecutarse (cada job de reversion mira el suyo).
+  # Los templates de despliegue no admiten condicion por paso, por eso son jobs aparte con condicion de job.
+  # Un job por template (cada uno trae su checkout: self), en agente alojado (zipDeploy va por Kudu y desde
+  # el pool privado el scm no resuelve). Los zips vienen del artefacto evidencias-FotoCodigo (FotoCodigoJob).
+  # Como en Codigo, AssetResolver espera a Functions; la condicion sin succeeded() lo deja correr aunque falle.
+  - job: RevertirFunctions
+    displayName: Redesplegar el codigo de la foto - Functions
+    dependsOn:
+      - Restaurar
+    timeoutInMinutes: 60
+    condition: and(not(canceled()), ne(stageDependencies.Codigo.DeployFunctions.result, 'Skipped'))
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/deploy-functions.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+        artifactName: evidencias-FotoCodigo
+        packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/functions.zip'
+  - job: RevertirAdmin
+    displayName: Redesplegar el codigo de la foto - Admin
+    dependsOn:
+      - Restaurar
+    timeoutInMinutes: 60
+    condition: and(not(canceled()), ne(stageDependencies.Codigo.DeployAdmin.result, 'Skipped'))
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/deploy-admin.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        adminWebAppName: '$(AZURE_ADMIN_WEB_APP_NAME)'
+        functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
+        resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+        keyVaultName: '$(KEY_VAULT_NAME)'
+        manageKeyVaultRbac: '$(manageKeyVaultRbac)'
+        targetEnvironment: ${{ parameters.targetEnvironment }}
+        artifactName: evidencias-FotoCodigo
+        packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/admin.zip'
+  - job: RevertirAssetResolver
+    displayName: Redesplegar el codigo de la foto - AssetResolver
+    dependsOn:
+      - Restaurar
+      - RevertirFunctions
+    timeoutInMinutes: 60
+    condition: and(not(canceled()), ne(stageDependencies.Codigo.DeployAssetResolver.result, 'Skipped'))
+    pool:
+      vmImage: windows-latest
+    steps:
+    - template: pipelines/templates/steps/deploy-assetresolver.yml
+      parameters:
+        serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
+        assetResolverWebAppName: '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)'
+        resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+        keyVaultName: '$(KEY_VAULT_NAME)'
+        artifactName: evidencias-FotoCodigo
+        packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/assetresolver.zip'
+  - job: Cierre
+    displayName: Registro e ingesta
+    dependsOn:
+      - Restaurar
+      - RevertirFunctions
+      - RevertirAdmin
+      - RevertirAssetResolver
+    condition: not(canceled())
+    timeoutInMinutes: 30
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+      resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
+      resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
+      resultadoRestaurar: $[ dependencies.Restaurar.result ]
+      resultadoRevertirFunctions: $[ dependencies.RevertirFunctions.result ]
+      resultadoRevertirAdmin: $[ dependencies.RevertirAdmin.result ]
+      resultadoRevertirAssetResolver: $[ dependencies.RevertirAssetResolver.result ]
+      resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
+      resultadoIA: $[ stageDependencies.IA.Promote.result ]
+      resultadoCodigo: $[ stageDependencies.Codigo.Validate.result ]
+      resultadoConfiguracion: $[ stageDependencies.Configuracion.ConfigJob.result ]
+      ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+        resultadoAltas: $[ stageDependencies.Altas.Apply.result ]
+      resultadoVerificacion: $[ stageDependencies.Verificacion.VerifJob.result ]
+      bdRestaurada: $[ dependencies.Restaurar.outputs['restoreBd.bdRestaurada'] ]
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Set-ReleaseRevertida (solo si las tablas de BD se restauraron)
+      condition: and(succeeded(), eq(variables['bdRestaurada'], 'true'))
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          Import-Module (Resolve-Path ./scripts/release/ReleaseCommon.psm1).Path
+          Import-Module (Resolve-Path ./scripts/release/ReleaseRegistro.psm1).Path
+          $n = Set-ReleaseRevertida -Server '$(SQL_SERVER_NAME)' -Database '$(sqlDatabaseName)' -BuildId '$(Build.BuildId)'
+          Write-Host "Filas del registro marcadas como Revertido: $n"
+    - task: AzureCLI@2
+      displayName: Set-ReleaseIngesta.ps1 -Estado Activa
+      condition: succeededOrFailed()
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Set-ReleaseIngesta.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -Estado Activa
+          if ($LASTEXITCODE -ne 0) { throw "Set-ReleaseIngesta.ps1 -Estado Activa termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: VueltaAtrasCierre
+  # Reinicio con health: HTTP al host de la Function App (endpoint privado sin enlace DNS a la VNet del
+  # pool privado), en agente alojado. Corre aunque Cierre falle, como antes (succeededOrFailed).
+  - job: ReinicioVuelta
+    displayName: Reinicio con health (agente alojado)
+    dependsOn: Cierre
+    condition: not(canceled())
+    timeoutInMinutes: 30
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Restart-ReleaseFunctionApp.ps1
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Restart-ReleaseFunctionApp.ps1 `
+            -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
+            -FunctionApp '$(AZURE_FUNCTIONS_APP_NAME)' `
+            -HealthUrl '$(healthUrl)' `
+            -OutFile '$(evidenciasDir)/health-vueltaatras.json'
+          if ($LASTEXITCODE -ne 0) { throw "Restart-ReleaseFunctionApp.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: VueltaAtrasReinicio
+  # Resumen en rojo y cierre del run. Solo ficheros de artefactos: agente alojado.
+  - job: ResumenVuelta
+    displayName: Resumen y run en rojo (agente alojado)
+    pool:
+      vmImage: windows-latest
+    dependsOn:
+      - Restaurar
+      - RevertirFunctions
+      - RevertirAdmin
+      - RevertirAssetResolver
+      - Cierre
+      - ReinicioVuelta
+    condition: not(canceled())
+    timeoutInMinutes: 30
+    variables:
+      releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
+      resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
+      resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
+      resultadoRestaurar: $[ dependencies.Restaurar.result ]
+      resultadoRevertirFunctions: $[ dependencies.RevertirFunctions.result ]
+      resultadoRevertirAdmin: $[ dependencies.RevertirAdmin.result ]
+      resultadoRevertirAssetResolver: $[ dependencies.RevertirAssetResolver.result ]
+      resultadoCierre: $[ dependencies.Cierre.result ]
+      resultadoReinicioVuelta: $[ dependencies.ReinicioVuelta.result ]
+      resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
+      resultadoIA: $[ stageDependencies.IA.Promote.result ]
+      resultadoCodigo: $[ stageDependencies.Codigo.Validate.result ]
+      resultadoConfiguracion: $[ stageDependencies.Configuracion.ConfigJob.result ]
+      resultadoReinicioConfiguracion: $[ stageDependencies.Configuracion.ReinicioJob.result ]
+      ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+        resultadoAltas: $[ stageDependencies.Altas.Apply.result ]
+        resultadoReinicioAltas: $[ stageDependencies.Altas.ReinicioJob.result ]
+      resultadoVerificacion: $[ stageDependencies.Verificacion.VerifJob.result ]
+      resultadoSmoke: $[ stageDependencies.Verificacion.SmokeJob.result ]
+    steps:
+    - checkout: self
+    # Las evidencias de las stages que llegaron a publicar; las que no existen solo dan aviso.
+    - download: current
+      artifact: evidencias-Foto
+      condition: succeededOrFailed()
+      continueOnError: true
+    - download: current
+      artifact: evidencias-FotoCodigo
+      condition: succeededOrFailed()
+      continueOnError: true
+    - download: current
+      artifact: evidencias-VueltaAtras
+      condition: succeededOrFailed()
+      continueOnError: true
+    - download: current
+      artifact: evidencias-Configuracion
+      condition: succeededOrFailed()
+      continueOnError: true
+    - download: current
+      artifact: evidencias-ConfiguracionReinicio
+      condition: succeededOrFailed()
+      continueOnError: true
+    - download: current
+      artifact: evidencias-VueltaAtrasReinicio
+      condition: succeededOrFailed()
+      continueOnError: true
+    - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
+      - download: current
+        artifact: evidencias-Altas
+        condition: succeededOrFailed()
+        continueOnError: true
+      - download: current
+        artifact: evidencias-AltasReinicio
+        condition: succeededOrFailed()
+        continueOnError: true
+    - download: current
+      artifact: evidencias-Verificacion
+      condition: succeededOrFailed()
+      continueOnError: true
+    - download: current
+      artifact: evidencias-VerificacionSmoke
+      condition: succeededOrFailed()
+      continueOnError: true
+    - pwsh: |
+        $ErrorActionPreference = 'Continue'
+        $ws = '$(Pipeline.Workspace)'
+        $todas = Join-Path $ws 'evidencias-all'
+        New-Item -ItemType Directory -Force -Path $todas | Out-Null
+        foreach ($d in @(Get-ChildItem -LiteralPath $ws -Directory -Filter 'evidencias-*' | Where-Object { $_.Name -ne 'evidencias-all' })) {
+          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' -and $_.Name -ne 'foto-settings.json' })) {
+            $dest = Join-Path $todas (Join-Path $d.Name $f.FullName.Substring($d.FullName.Length).TrimStart('\', '/'))
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+            Copy-Item -LiteralPath $f.FullName -Destination $dest
+          }
+        }
+        $resultados = @(
+          [ordered]@{ nombre = 'Guard'; resultado = '$(resultadoGuard)' },
+          [ordered]@{ nombre = 'Foto'; resultado = '$(resultadoFoto)' },
+          [ordered]@{ nombre = 'FotoCodigo'; resultado = '$(resultadoFotoCodigo)' },
+          [ordered]@{ nombre = 'Migraciones'; resultado = '$(resultadoMigraciones)' },
+          [ordered]@{ nombre = 'IA'; resultado = '$(resultadoIA)' },
+          [ordered]@{ nombre = 'Codigo'; resultado = '$(resultadoCodigo)' },
+          [ordered]@{ nombre = 'Configuracion'; resultado = '$(resultadoConfiguracion)' },
+          [ordered]@{ nombre = 'Configuracion: Reinicio'; resultado = '$(resultadoReinicioConfiguracion)' },
+          [ordered]@{ nombre = 'Verificacion'; resultado = '$(resultadoVerificacion)' },
+          [ordered]@{ nombre = 'Verificacion: Smoke'; resultado = '$(resultadoSmoke)' },
+          [ordered]@{ nombre = 'VueltaAtras: Restaurar BD y settings'; resultado = '$(resultadoRestaurar)' },
+          [ordered]@{ nombre = 'VueltaAtras: Revertir Functions'; resultado = '$(resultadoRevertirFunctions)' },
+          [ordered]@{ nombre = 'VueltaAtras: Revertir Admin'; resultado = '$(resultadoRevertirAdmin)' },
+          [ordered]@{ nombre = 'VueltaAtras: Revertir AssetResolver'; resultado = '$(resultadoRevertirAssetResolver)' },
+          [ordered]@{ nombre = 'VueltaAtras: Registro e ingesta'; resultado = '$(resultadoCierre)' },
+          [ordered]@{ nombre = 'VueltaAtras: Reinicio'; resultado = '$(resultadoReinicioVuelta)' }
+        )
+        # Altas solo existe fuera de dev (compilacion condicional del YAML).
+        if ('${{ ne(parameters.targetEnvironment, 'dev') }}' -eq 'True') { $resultados += [ordered]@{ nombre = 'Altas'; resultado = '$(resultadoAltas)' }; $resultados += [ordered]@{ nombre = 'Altas: Reinicio'; resultado = '$(resultadoReinicioAltas)' } }
+        $json = ConvertTo-Json -InputObject $resultados -Compress
+        $out = '$(Build.ArtifactStagingDirectory)/release'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        & ./scripts/release/New-ReleaseResumen.ps1 `
+          -Environment '${{ parameters.targetEnvironment }}' `
+          -Version '$(releaseTag)' `
+          -Commit '$(Build.SourceVersion)' `
+          -BuildId '$(Build.BuildId)' `
+          -Resultado Rojo `
+          -EvidenciasDir $todas `
+          -StageResults $json `
+          -FotoSettingsPath '$(Pipeline.Workspace)/evidencias-Foto/foto-settings.json' `
+          -OutFile (Join-Path $out 'resumen.md')
+        if ($LASTEXITCODE -ne 0) { throw "New-ReleaseResumen.ps1 termino con codigo $LASTEXITCODE" }
+        Copy-Item -LiteralPath $todas -Destination (Join-Path $out 'evidencias') -Recurse
+      displayName: Resumen del run (rojo)
+      condition: succeededOrFailed()
+    - task: PublishPipelineArtifact@1
+      displayName: Publicar release-${{ parameters.targetEnvironment }}-$(Build.BuildId)
+      condition: succeededOrFailed()
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/release'
+        artifact: 'release-${{ parameters.targetEnvironment }}-$(Build.BuildId)'
+    # Ultimo paso: la vuelta atras deja siempre el run en rojo, aunque haya ido bien.
+    - pwsh: |
+        Write-Host '##vso[task.logissue type=error]La release de ${{ parameters.targetEnvironment }} fallo y se ha ejecutado la vuelta atras; revisar resumen.md del artefacto release-${{ parameters.targetEnvironment }}-$(Build.BuildId).'
+        exit 1
+      displayName: Dejar el run en rojo
+      condition: always()

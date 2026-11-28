@@ -20,13 +20,14 @@ Los parámetros son `string` salvo donde se indica `boolean`. «Checkout» y «d
 | `migrations-generate.yml` | 807 (stage Generate) | ninguno | `MigrationsScript` (`migrations.sql`) | | checkout |
 | `migrations-apply.yml` | 807 (stage Apply) | `serviceConnection`, `resourceGroup`, `sqlServerName`, `sqlDatabaseName`, `addTransientFirewallRule` (boolean), `backfillClaveIntencion` (boolean) | | `MigrationsScript` | checkout y download |
 | `ai-export.yml` | 832 (job Export) | `serviceConnection`, `sqlServer`, `sqlDatabaseName`, `sourceEnvironment`, `releaseTag`, `artifactName` (por defecto `db-config`) | artefacto `artifactName` (`db-config`) | | checkout |
-| `ai-promote.yml` | 832 (job Promote) | `targetServiceConnection`, `promotionServiceConnection`, `targetEnvironment`, `sourceEnvironment`, `routeArgs`, `dryRunArg`, `runValidation` (boolean), `cuSecondaryAnalyzers`, `artifactName` (por defecto `ai-artifacts`) | artefacto `artifactName` (manifiestos) | | checkout y `download: none` |
+| `ai-promote.yml` | 832 (job Promote) | `targetServiceConnection`, `promotionServiceConnection`, `targetEnvironment`, `sourceEnvironment`, `routeArgs`, `dryRunArg`, `runValidation` (boolean), `cuSecondaryAnalyzers`, `artifactName` (obligatorio) | artefacto `artifactName` (manifiestos) | | checkout y `download: none` |
 | `config-seed.yml` | 832 (job Diff) | `targetServiceConnection`, `targetSqlServer`, `sqlDatabaseName`, `targetResourceGroup`, `targetFunctionApp`, `targetEnvironment`, `sourceEnvironment`, `applyMissingConfig` (boolean), `releaseTag` | `config-diff` | `db-config` | checkout y download |
 | `config-apply.yml` | 832 (job Apply) | `targetServiceConnection`, `targetSqlServer`, `sqlDatabaseName`, `targetEnvironment`, `sourceEnvironment`, `releaseTag` | `config-apply-<intento>` | `config-diff`, `db-config` | checkout y download |
 | `build-solucion.yml` | 799 (BuildJob) | `solutionPath`, `buildConfiguration`, `testsProject`, `functionsProject`, `adminProject`, `assetResolverProject` | `drop-functions`, `drop-admin`, `drop-assetresolver` | | sin checkout (lo hace el job) |
-| `deploy-functions.yml` | 799 (DeployFunctionsJob) | `serviceConnection`, `functionAppName`, `resourceGroup`, `keyVaultName`, `assetResolverBaseUrl`, `aiOpenaiPrimaryEndpoint`, `aiCuPrimaryEndpoint`, `aiCuSecondaryEndpoint`, `aiDiEndpoint`, `cuMaxConcurrentCalls`, `cuHardTimeoutSeconds`, `cuEnableCircuitBreaker`, `cuCircuitBreakerFailureThreshold`, `cuCircuitBreakerOpenSeconds`, `cuMaxRetries`, `cuInitialRetryDelayMs`, `promptTracingEnabled`, `promptTracingIncludePromptText`, `promptTracingMaxPromptTextChars`, `gdcEndpoint`, `diUseInlineContent`, `dedupModoEstricto`, `promptDefaultsModelKey`, `gcHeapHardLimitPercent`, `blobRetentionCleanupCron`, `blobRetentionDefaultDays`, `blobRetentionBatchSize`, `gdcTimeoutSeconds`, `environmentName` | | `drop-functions` | checkout y download |
-| `deploy-admin.yml` | 799 (DeployAdminJob) | `serviceConnection`, `adminWebAppName`, `functionAppName`, `resourceGroup`, `keyVaultName`, `manageKeyVaultRbac`, `targetEnvironment` | | `drop-admin` | checkout y download |
-| `deploy-assetresolver.yml` | 799 (DeployAssetResolverJob) | `serviceConnection`, `assetResolverWebAppName`, `resourceGroup`, `keyVaultName` | | `drop-assetresolver` | checkout y download |
+| `deploy-functions.yml` | 799 (DeployFunctionsJob), vuelta atras de Release | `serviceConnection`, `functionAppName`, `artifactName` (por defecto `drop-functions`), `packagePath` (por defecto `$(Pipeline.Workspace)/drop-functions`) | | `drop-functions` | checkout y download; solo `AzureFunctionApp@2` con zipDeploy |
+| `functions-settings.yml` | 799 (DeployFunctionsJob, a continuacion de `deploy-functions.yml`) | `serviceConnection`, `functionAppName`, `resourceGroup`, `keyVaultName`, `assetResolverBaseUrl`, `aiOpenaiPrimaryEndpoint`, `aiCuPrimaryEndpoint`, `aiCuSecondaryEndpoint`, `aiDiEndpoint`, `cuMaxConcurrentCalls`, `cuHardTimeoutSeconds`, `cuEnableCircuitBreaker`, `cuCircuitBreakerFailureThreshold`, `cuCircuitBreakerOpenSeconds`, `cuMaxRetries`, `cuInitialRetryDelayMs`, `promptTracingEnabled`, `promptTracingIncludePromptText`, `promptTracingMaxPromptTextChars`, `gdcEndpoint`, `diUseInlineContent`, `dedupModoEstricto`, `promptDefaultsModelKey`, `gcHeapHardLimitPercent`, `blobRetentionCleanupCron`, `blobRetentionDefaultDays`, `blobRetentionBatchSize`, `gdcTimeoutSeconds`, `environmentName` | | | ensure de settings, decisivos (AB#101570), retirada de heredados y validacion CU |
+| `deploy-admin.yml` | 799 (DeployAdminJob) | `serviceConnection`, `adminWebAppName`, `functionAppName`, `resourceGroup`, `keyVaultName`, `manageKeyVaultRbac`, `targetEnvironment`, `artifactName` (por defecto `drop-admin`), `packagePath` | | `drop-admin` | checkout y download |
+| `deploy-assetresolver.yml` | 799 (DeployAssetResolverJob) | `serviceConnection`, `assetResolverWebAppName`, `resourceGroup`, `keyVaultName`, `artifactName` (por defecto `drop-assetresolver`), `packagePath` | | `drop-assetresolver` | checkout y download |
 | `validate-configuration.yml` | 799 (ValidateConfigurationJob) | `serviceConnection`, `resourceGroup`, `functionAppName`, `adminWebAppName`, `assetResolverWebAppName` | | | checkout |
 
 Notas:
@@ -52,3 +53,129 @@ Procedimiento:
 4. Ensayar en DEV el pipeline refactorizado antes de darlo por bueno.
 
 Los resultados de estas comparaciones van a `docs/auxiliares/temps/<fecha>/` (carpeta ignorada por git).
+
+## Pipeline Release
+
+`azure-pipelines-release.yml` (pipeline `AI DocClassExt (Release)`, id `842`; AB#101583, hito 2) es la release de un botón: una ejecución es la release de un entorno, con la versión que declara el manifiesto de `releases/` (`CURRENT`; en dev, `_ensayo`). Compone los templates de esta carpeta en jobs normales y la lógica propia de la release está en `scripts/release/`. Diseño en `docs/superpowers/specs/2026-11-26-pipeline-release-un-boton-design.md` (y su enmienda del 2026-11-27); decisiones en ADR-007 y ADR-008.
+
+### Parámetros
+
+| Parámetro | Valores | Notas |
+|---|---|---|
+| `targetEnvironment` | `dev` (por defecto), `pre`, `prod` | `dev` es solo para ensayos. Origen del salto como en el 832: `pre` desde `dev`, `prod` desde `pre`; `dev` recupera desde PRO con `-FromProd -DryRun` y sin export ni altas. |
+| `simularFalloEn` | `ninguna` (por defecto, sin fallo; se pasa como vacío a Guard y a `simular-fallo.yml` porque Azure DevOps no admite la cadena vacía en `values`), `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas`, `Verificacion` | Solo en dev (Guard lo rechaza fuera de dev). Fuerza un fallo al inicio de esa stage (`simular-fallo.yml`) para ensayar la vuelta atrás. |
+
+Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variables/aprobadores.yml`, las constantes del 799 y del 832 y, por entorno, el origen del salto (`sourceEnvironment`, `sourceServiceConnection`, `sourceSqlServer`, `routeArgs`, `dryRunArg`). Pool por defecto `docia-mdp-private`; `Aprobacion` agentless; los jobs en `windows-latest` (agente alojado) y la regla que decide el pool están en «Jobs y pool» más abajo. Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008).
+
+### Qué corre en agente alojado y por qué
+
+El Kudu (`scm`) de la Function App no resuelve desde el pool privado `docia-mdp-private`: la app tiene endpoint privado y la zona DNS no está enlazada a la VNet del pool (NODATA). Desde un agente alojado resuelve a IP pública y Kudu con Bearer de Entra responde. Por eso todo lo que habla con Kudu va en `windows-latest`, como el 799: la comprobación de Kudu de Guard (`GuardKudu`), la foto del código (`FotoCodigoJob`) y los despliegues de código de `Codigo` (`DeployFunctions`, `DeployAdmin`, `DeployAssetResolver`) y de `VueltaAtras` (`RevertirFunctions`, `RevertirAdmin`, `RevertirAssetResolver`). Lo mismo vale para el host principal: `<app>.azurewebsites.net` es un CNAME a `<app>.privatelink.azurewebsites.net` y tampoco resuelve desde el pool privado, así que todo job que hace HTTP a la Function App (reinicio con health: `Configuracion/ReinicioJob`, `Altas/ReinicioJob`, `VueltaAtras/ReinicioVuelta`; smoke: `Verificacion/SmokeJob`) va en hosted y se separa de los pasos de SQL, Key Vault y storage con `dependsOn`. SQL, Key Vault y storage siguen en el pool privado. Las llamadas a `az` con paréntesis u otros caracteres de `cmd` en argumentos sin espacios las prepara `ConvertTo-ReleaseAzArgumento` (en Windows, `az.cmd` rompe con `( ) & | < > ^`).
+
+### Jobs y pool
+
+Regla: un job se queda en `docia-mdp-private` solo si hace SQL, Key Vault (plano de datos) o Storage (plano de datos, incluidas `storage entity query` y la copia de blobs). Los jobs que solo usan ARM (`az functionapp ...`, `az webapp ...`), la API de Azure DevOps, HTTP al host de la app, Kudu o ficheros de artefactos van en `windows-latest`, donde un job tarda segundos en tener agente (en el pool privado, unos 3 minutos). Un job que mezcla pasos de los dos tipos se queda en el pool; no se parte solo por esto.
+
+| Stage | Job | Pool | Motivo |
+|---|---|---|---|
+| `Guard` | `GuardJob` | privado | SQL (registro y permisos) |
+| `Guard` | `GuardKudu` | alojado | Kudu |
+| `Build` | `BuildJob` | alojado | build del 799 |
+| `Aprobacion` | `Aprobacion1`, `Aprobacion2` | agentless | `ManualValidation@1` |
+| `Foto` | `FotoJob` | privado | SQL (foto de la BD) y tablas del task hub |
+| `Foto` | `FotoCodigoJob` | alojado | Kudu |
+| `FotoFallida` | `FotoFallidaJob` | alojado | solo ARM (ingesta) y ficheros de artefactos |
+| `Migraciones` | `Generate` | alojado | 807 |
+| `Migraciones` | `Apply` | privado | SQL (807) |
+| `IA` | `Export`, `Promote` | privado | SQL, Key Vault y storage (832) |
+| `Codigo` | `DeployFunctions`, `DeployAdmin`, `DeployAssetResolver`, `Validate` | alojado | ARM y Kudu |
+| `Configuracion` | `ConfigJob` | privado | SQL, Key Vault y storage (lifecycle) |
+| `Configuracion` | `ReinicioJob` | alojado | HTTP al host de la app |
+| `Altas` | `Seed`, `Apply` | privado | SQL (config-seed y config-apply) |
+| `Altas` | `ReinicioJob` | alojado | HTTP al host de la app |
+| `Verificacion` | `VerifJob` | privado | SQL (export de la config) |
+| `Verificacion` | `SmokeJob` | alojado | HTTP y API de Azure DevOps |
+| `Fin` | `FinJob` | privado | SQL (registro de cierre) |
+| `VueltaAtras` | `Restaurar` | privado | SQL (restauración de la BD) |
+| `VueltaAtras` | `RevertirFunctions`, `RevertirAdmin`, `RevertirAssetResolver` | alojado | Kudu |
+| `VueltaAtras` | `Cierre` | privado | SQL (`Set-ReleaseRevertida`) |
+| `VueltaAtras` | `ReinicioVuelta` | alojado | HTTP al host de la app |
+| `VueltaAtras` | `ResumenVuelta` | alojado | solo ficheros de artefactos |
+
+### Stages
+
+| Stage | Qué hace |
+|---|---|
+| `Guard` | Solo lectura: rama esperada por entorno, manifiesto, aprobadores, simulación, registro `ReleaseAplicada` y permisos. Emite `version`, `manifestPath`, `yaAplicada` e `ignorarRegistro` (`guard.<variable>` del job `GuardJob`, en el pool privado y con `-SinKudu`). La comprobación de Kudu de las tres apps va en el job `GuardKudu` (agente alojado, `Test-ReleasePermisos.ps1 -SoloKudu`); la stage falla si falla cualquiera de los dos. Si la versión ya está aplicada se saltan todas las demás. |
+| `Build` | Build y tests de la solución (template del 799); en paralelo a la espera de aprobación. |
+| `Aprobacion` | Dos `ManualValidation@1` encadenados (`Aprobacion1`, `Aprobacion2`), aprobadores de `aprobadores.yml`, 7 días de espera, rechazo al agotarse. En prod la segunda recuerda las cuatro puertas de PRE y el Smoke del Test Plan 100069. |
+| `Foto` | Foto de app settings, ingesta pausada, drenado del task hub (exit 3 = tiempo agotado: se rehabilita la ingesta y falla), copia de las tablas de configuración (`FotoJob`, pool privado) y, después, foto del código de las tres apps (`FotoCodigoJob`, agente alojado). Espera a `Aprobacion` y `Build`. |
+| `FotoFallida` | Solo si falla `Foto`: rehabilita la ingesta y publica el resumen en rojo (`FotoFallidaJob`, agente alojado). |
+| `Migraciones` | `Generate` y `Apply` (templates del 807, sin backfill ni regla de firewall). |
+| `IA` | `Export` de la config del origen (no en dev) y `Promote` de artefactos de IA (templates del 832). |
+| `Codigo` | Un job por template, como en el 799, todos en agente alojado: `DeployFunctions` (`deploy-functions.yml` y `functions-settings.yml`), `DeployAdmin` (en paralelo a Functions) y `DeployAssetResolver` (tras Functions); `Validate` depende de los tres. Con varios templates en un mismo job, cada `checkout: self` deja el repo en `s/<nombre>` y fallan las rutas relativas de los scripts. |
+| `Configuracion` | Pasos del manifiesto, secretos heredados de Key Vault y ciclo de vida del storage (cada uno con `-WhatIf` antes del real), reinicio con health en un job aparte (`ReinicioJob`, agente alojado). |
+| `Altas` | Solo pre y prod: `config-seed` y `config-apply` con `applyMissingConfig`; reinicio con health en `ReinicioJob` (agente alojado). |
+| `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con la clave maestra de la Function App (la ingesta está deshabilitada durante la release y cualquier otra clave da 404) y publicación en el Test Plan 100069 (el smoke va en `SmokeJob`, agente alojado, tras `VerifJob`). |
+| `Fin` | Solo con todo en verde: ingesta activa, cierre en `ReleaseAplicada`, `resumen.md` y artefacto `release-<env>-<build>`. |
+| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto desde `evidencias-FotoCodigo`, un job por app y solo si su job de `Codigo` no fue `Skipped` (`RevertirFunctions`, `RevertirAdmin` y `RevertirAssetResolver`, agente alojado), marca el registro como `Revertido`, rehabilita la ingesta (`Cierre`, que marca `Revertido` solo si la restauración de las tablas de BD terminó bien: salida `bdRestaurada` del paso `Restore-ReleaseFotoBd.ps1`, porque la spec liga `Revertido` a las tablas; si falla un redespliegue del código el registro queda `Revertido` igualmente y lo dice el resumen), reinicia (`ReinicioVuelta`, agente alojado), publica el resumen en rojo y deja el run en rojo (`ResumenVuelta`, agente alojado). `resumen.md` lleva la línea `Vuelta atras: completa` o `INCOMPLETA (<jobs y resultado>)` y el resultado real de la reposición de settings y de cada redespliegue (los jobs de reversión corren aunque `Restaurar` falle). |
+
+`simularFalloEn` coloca `simular-fallo.yml` como primer paso de `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas` y `Verificacion`.
+
+### Artefactos
+
+- `evidencias-<stage>` (`Foto`, `FotoCodigo`, `Configuracion`, `ConfiguracionReinicio`, `Altas`, `AltasReinicio`, `Verificacion`, `VerificacionSmoke`, `VueltaAtras`, `VueltaAtrasCierre`, `VueltaAtrasReinicio`): ficheros que dejan los scripts en `$(Build.ArtifactStagingDirectory)/evidencias`, sin secretos ni listado completo de app settings. `evidencias-FotoCodigo/foto-codigo/*.zip` (más `foto-codigo.json`) es el código desplegado antes de la release (`functions.zip`, `admin.zip`, `assetresolver.zip`).
+- `release-<env>-<build>`: `resumen.md` y las evidencias (sin los zips del código). Se publica en verde (`Fin`) y en rojo (`VueltaAtras`, `FotoFallida`).
+- Los propios de los templates: `drop-*` (build), `MigrationsScript`, `db-config`, `ai-artifacts-<env>-<intento>`, `config-diff` y `config-apply-<intento>`.
+
+### Scripts de `scripts/release/`
+
+| Script | Qué hace |
+|---|---|
+| `Get-ReleaseManifest.ps1`, `Test-ReleaseManifest.ps1` | Leen y validan el manifiesto de `releases/`. |
+| `Invoke-ReleaseGuard.ps1` | Comprobaciones de `Guard` y variables de salida. |
+| `Test-ReleasePermisos.ps1` | Lecturas que comprueban los permisos de la service connection (lo llama `Guard`). |
+| `Save-ReleaseFotoSettings.ps1` / `Restore-ReleaseFotoSettings.ps1` | Foto y restauración de los app settings que toca la release. |
+| `Set-ReleaseIngesta.ps1` | Pausa o reactiva la ingesta (`AzureWebJobs.IngestDocument.Disabled`). |
+| `Wait-ReleaseTaskHubDrenado.ps1` | Espera a que el task hub no tenga instancias en curso (exit 3 al agotar el tiempo). |
+| `New-ReleaseFotoBd.ps1` / `Restore-ReleaseFotoBd.ps1` | Copia `<Tabla>__rel_<BuildId>` de las tablas de configuración y restauración sin `MERGE`: en una sola transacción, `UPDATE` e `INSERT` de cada tabla de padre a hija y después `DELETE` de hija a padre; solo se restauran las columnas presentes en la tabla y en su copia. |
+| `Save-ReleaseFotoCodigo.ps1` | Descarga por Kudu, con token de Entra (sin autenticación básica), el código desplegado de las tres apps. |
+| `Invoke-ReleasePasos.ps1` | Aplica los pasos del manifiesto (con ensayo previo) y los registra por hash. |
+| `Restart-ReleaseFunctionApp.ps1` | Reinicia la Function App y espera al health. |
+| `Invoke-ReleaseSmoke.ps1` | Smoke E2E con la clave maestra temporal y publicación en el Test Plan 100069. |
+| `New-ReleaseResumen.ps1` | Genera `resumen.md` a partir de las evidencias. |
+| `ReleaseCommon.psm1`, `ReleaseRegistro.psm1` | Utilidades de `az` y SQL, y registro en `ReleaseAplicada` (`Register-ReleaseCierre`, `Set-ReleaseRevertida`). |
+
+### Qué no se deshace
+
+La vuelta atrás no revierte: las migraciones EF, los analyzers de CU copiados por el 832 (sobrescriben los del destino), los secretos heredados de Key Vault borrados (AB#101450), los deployments de IA (aditivos) ni el artefacto de embeddings copiado. Las copias `<Tabla>__rel_<BuildId>` se conservan. Si falla `Foto` no se ha tocado nada más. `RevertirAdmin` compone el template `deploy-admin.yml` entero, así que, además del zip de la foto, reaplica la identidad y los settings del Admin del commit nuevo (hoy estables: `BaseUrl` y referencia a Key Vault).
+
+### Cancelar o reintentar
+
+- Un run cancelado después de `Foto` no dispara `VueltaAtras`: sus condiciones miran `Failed`, no `Canceled`. Queda la ingesta pausada y el entorno a medias (pueden estar aplicadas migraciones, IA, código o settings). A mano: reactivar la ingesta con `pwsh -NoProfile -File ./scripts/release/Set-ReleaseIngesta.ps1 -ResourceGroup <rg> -FunctionApp <app> -Estado Activa`, mirar qué stages llegaron a correr en la vista del run y en sus artefactos `evidencias-*` y deshacer lo necesario con el camino manual de respaldo (`docs/releases/v1.2.0/GUIA_OPERADOR_PRE.md` y el Anexo B de `docs/procedimientos/RELEASE_MANAGEMENT.md`).
+- No usar «Rerun failed jobs» ni «Retry stage»: los artefactos tienen nombres fijos y la foto de BD y de código es de ese `BuildId`. Siempre se lanza un run nuevo: `Guard` lee el registro e `Invoke-ReleasePasos.ps1` salta los pasos ya aplicados por hash y rehace el resto. Una versión ya cerrada termina en verde sin hacer nada y con un aviso.
+- `FotoFallida` rehabilita la ingesta aunque no la hubiera pausado este run: si la ingesta estaba pausada a propósito antes de lanzar la release, hay que volver a pausarla.
+- `FinJob` reactiva la ingesta antes de `Register-ReleaseCierre`. Si el cierre falla, el run queda en rojo sin vuelta atrás y el siguiente run rehace todo porque el registro sigue en `Parcial`.
+
+### Ensayo
+
+Ensayada en DEV el 2026-11-27 y 2026-11-28 (rama `feature/101583-pipeline-release-hito2`, pipeline 842, versión `_ensayo`, que ignora el registro `ReleaseAplicada` pero lo escribe). Detalle de cada run y duraciones por stage en `docs/auxiliares/temps/2026-11-27/ensayos-release/ensayos.md` (temporal, no versionado).
+
+| Run | Parámetros | Resultado |
+|---|---|---|
+| 80295, 80297, 80299 | dev, `ninguna` | Rojos de puesta a punto, corregidos en la propia rama: Kudu con Bearer de Entra y `/api/settings` (80295), `az.cmd` con paréntesis y Kudu y HTTP al host desde agente alojado (80297), un job por template de despliegue (80299, DEV quedó igual). |
+| 80301 | dev, `ninguna` | Rojo en `Verificacion` (smoke 1/6: `IngestDocument` 404 con la clave `default`). Vale como ensayo de vuelta atrás tras fallo real: restauración completa, hashes iguales y pasos `Revertido`. Corregido con la clave maestra. |
+| 80302 | dev, `ninguna` | Verde (run A): smoke 6/6 y 3/3, Test Plan run 1076994, pasos y cierre `Aplicado`, hashes iguales salvo `FechaActualizacion` de `clasificador.embeddings`. |
+| 80303 | dev, `simularFalloEn=Configuracion` | Rojo por diseño (run B): vuelta atrás completa, hashes y settings iguales a la foto, sin filas del run en el registro. |
+| 80306 | dev, `ninguna` | Verde (run D): repetición de A, smoke 6/6 y 3/3, Test Plan run 1077000. |
+| 80307, 80308 | pre, `ninguna` | Rojos en `Guard` por diseño (paso 6): la rama de trabajo no es `develop` y se rechaza antes de tocar PRE. En el 80307 `GuardKudu` dio timeout de 30 s en Admin y AssetResolver; en el 80308 pasó, así que fue transitorio (la comprobación de Kudu reintenta ahora una vez tras 15 s). |
+| 80309 | dev, `simularFalloEn=IA` (sobre 0b9005bd) | Rojo por diseño: vuelta atrás con BD y settings restaurados, ingesta reactivada y reinicio con health correcto. Los tres `Revertir*` no se ejecutan porque `Codigo` no llegó a correr, así que no se redespliega código (lo esperado). Tablas de configuración con los mismos hashes que antes y ninguna fila en `ReleaseAplicada`. |
+| 80311 | dev, `simularFalloEn=Configuracion` (sobre ce5c8211) | Rojo en `Guard`: Kudu del Admin de DEV sin respuesta en los dos intentos de 60 s; DEV sin tocar. Transitorio; se relanzó como 80312. |
+| 80312 | dev, `simularFalloEn=Configuracion` (sobre ce5c8211) | Rojo por diseño, primer run real con las correcciones de la revisión final: vuelta atrás completa con los tres `Revertir*` redesplegando la foto, `Set-ReleaseRevertida` ejecutado al quedar la BD restaurada, resumen con «Vuelta atras: completa». Hashes iguales y ninguna fila del run en `ReleaseAplicada`. |
+
+No se ha ensayado el salto por hash de pasos ya aplicados con una versión real (solo Pester, porque `_ensayo` ignora el registro) ni las altas de configuración (no corren en dev).
+
+Una ejecución completa en dev dura unos 40 minutos de máquina; el arranque de agente en `docia-mdp-private` cuesta unos 160-195 s por job.
+
+Pendiente: el primer uso real en PRE es la v1.2.0 (AB#101584), con rama `develop`. Permisos de las service connections en `docs/procedimientos/PERMISOS_SPN_RELEASE.md`.
+
+Riesgo abierto: los aprobadores viven en `variables/aprobadores.yml`, es decir, en el repositorio; quien pueda integrar en `develop` o `master` puede cambiarlos. A 2026-11-27 el proyecto no tiene ninguna política de rama activa (`_apis/policy/configurations` devuelve 0): ni revisores mínimos en `develop` ni en `master`. Mientras no la haya, el único control es quién tiene permiso de push. Cambiar la política es una escritura en Azure DevOps fuera de este hito.
