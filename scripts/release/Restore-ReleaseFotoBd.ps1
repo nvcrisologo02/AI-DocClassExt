@@ -5,7 +5,10 @@
 .DESCRIPTION
     Comprueba que existen todas las copias (si falta alguna, exit 2). Por tabla lee de sys.columns,
     sys.indexes y sys.index_columns la clave primaria, las columnas (sin las calculadas) y si hay
-    identity. Construye con New-ReleaseRestoreSql todas las pasadas 1 (UPDATE e INSERT) en el orden de
+    identity. Lee tambien las columnas de la copia y restaura solo las presentes en las dos (la foto es
+    anterior a Migraciones, que puede anadir columnas a la tabla viva); si a la copia le falta una columna
+    de la clave primaria, exit 2. Una columna nueva NOT NULL sin valor por defecto sigue haciendo fallar
+    el INSERT de las filas borradas por la release: el fallo es ruidoso y hace rollback. Construye con New-ReleaseRestoreSql todas las pasadas 1 (UPDATE e INSERT) en el orden de
     -Tablas y despues todas las pasadas 2 (DELETE) en orden inverso, y las ejecuta en UNA transaccion
     (Invoke-ReleaseSqlTransaccion): o se restaura todo o no cambia nada. Asi la FK
     CatalogoTdn2.Tdn1Id -> CatalogoTdn1 nunca se rompe. Imprime actualizadas/insertadas/borradas por tabla
@@ -74,8 +77,19 @@ foreach ($t in $Tablas) {
         Write-Host "La tabla $t no tiene clave primaria (o no existe): no se puede restaurar."
         exit 2
     }
-    $nombres = @($validas | ForEach-Object { [string]$_.Columna })
-    $identity = @($validas | Where-Object { [bool]$_.EsIdentity }).Count -gt 0
+    # La foto se hizo antes de Migraciones: una columna anadida despues no esta en la copia. Solo se
+    # restauran las columnas presentes en las dos tablas; si falta una columna de la clave, no se puede.
+    $resCopia = Invoke-ReleaseSql -Server $Server -Database $Database -Query $queryMeta -Parameters @{ Tabla = "dbo.[${t}__rel_$BuildId]" }
+    $colsCopia = if ($resCopia -is [System.Data.DataTable]) { @($resCopia.Rows) } else { @($resCopia) }
+    $enCopia = @($colsCopia | ForEach-Object { [string]$_.Columna })
+    $claveFalta = @($clave | Where-Object { $enCopia -cnotcontains $_ })
+    if ($claveFalta.Count -gt 0) {
+        Write-Host "A la copia ${t}__rel_$BuildId le faltan columnas de la clave primaria ($($claveFalta -join ', ')): no se puede restaurar."
+        exit 2
+    }
+    $comunes = @($validas | Where-Object { $enCopia -ccontains [string]$_.Columna })
+    $nombres = @($comunes | ForEach-Object { [string]$_.Columna })
+    $identity = @($comunes | Where-Object { [bool]$_.EsIdentity }).Count -gt 0
     $sqlPorTabla[$t] = New-ReleaseRestoreSql -Tabla $t -Copia "${t}__rel_$BuildId" -ClavePrimaria $clave -Columnas $nombres -TieneIdentity $identity
 }
 

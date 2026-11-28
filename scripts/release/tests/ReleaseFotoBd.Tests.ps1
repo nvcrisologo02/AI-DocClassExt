@@ -139,6 +139,38 @@ Describe 'Restore-ReleaseFotoBd' {
         $LASTEXITCODE | Should -Be 2
         Should -Invoke Invoke-ReleaseSql -Times 0
     }
+    It 'solo restaura las columnas que existen tambien en la copia (migracion que anade una columna)' {
+        Mock Invoke-ReleaseSql { 1 } -ParameterFilter { $Query -match 'SELECT OBJECT_ID\(@Nombre\)' }
+        Mock Invoke-ReleaseSql {
+            [pscustomobject]@{ Columna = 'Id'; EsIdentity = $false; EsCalculada = $false; EsClave = 1 }
+            [pscustomobject]@{ Columna = 'Valor'; EsIdentity = $false; EsCalculada = $false; EsClave = 0 }
+            [pscustomobject]@{ Columna = 'Nueva'; EsIdentity = $false; EsCalculada = $false; EsClave = 0 }
+        } -ParameterFilter { $Query -match 'sys\.columns' }
+        Mock Invoke-ReleaseSql {
+            [pscustomobject]@{ Columna = 'Id'; EsIdentity = $false; EsCalculada = $false; EsClave = 0 }
+            [pscustomobject]@{ Columna = 'Valor'; EsIdentity = $false; EsCalculada = $false; EsClave = 0 }
+        } -ParameterFilter { $Query -match 'sys\.columns' -and $Parameters.Tabla -match '__rel_' }
+        Mock Invoke-ReleaseSqlTransaccion { $global:T5Queries = $Queries; , ([int[]]::new($Queries.Count)) }
+        & $script:restaura -Server s -Database d -BuildId 7 -OutDir $global:T5Out -Tablas Tipologias 6>&1 | Out-Null
+        $LASTEXITCODE | Should -Be 0
+        ($global:T5Queries -join "`n") | Should -Not -Match '\[Nueva\]'
+        ($global:T5Queries -join "`n") | Should -Match '\[Valor\]'
+    }
+    It 'sale con exit 2 si a la copia le falta una columna de la clave primaria y no ejecuta nada' {
+        Mock Invoke-ReleaseSql { 1 } -ParameterFilter { $Query -match 'SELECT OBJECT_ID\(@Nombre\)' }
+        Mock Invoke-ReleaseSql {
+            [pscustomobject]@{ Columna = 'Id'; EsIdentity = $false; EsCalculada = $false; EsClave = 1 }
+            [pscustomobject]@{ Columna = 'Valor'; EsIdentity = $false; EsCalculada = $false; EsClave = 0 }
+        } -ParameterFilter { $Query -match 'sys\.columns' }
+        Mock Invoke-ReleaseSql {
+            [pscustomobject]@{ Columna = 'Valor'; EsIdentity = $false; EsCalculada = $false; EsClave = 0 }
+        } -ParameterFilter { $Query -match 'sys\.columns' -and $Parameters.Tabla -match '__rel_' }
+        Mock Invoke-ReleaseSqlTransaccion { }
+        $out = & $script:restaura -Server s -Database d -BuildId 7 -OutDir $global:T5Out -Tablas Tipologias 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        $out | Should -Match 'clave primaria'
+        Should -Invoke Invoke-ReleaseSqlTransaccion -Times 0
+    }
     It 'atribuye las filas a cada tabla y escribe restauracion-bd.json' {
         Mock Invoke-ReleaseSql { 1 } -ParameterFilter { $Query -match 'SELECT OBJECT_ID\(@Nombre\)' }
         Mock Invoke-ReleaseSql {
