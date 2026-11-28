@@ -82,6 +82,16 @@ Describe 'Invoke-ReleaseGuard' {
         $script:code | Should -Be 0
         $script:out | Should -Match 'variable=yaAplicada;isOutput=true\]true'
     }
+    It 'avisa con un warning de que la version ya esta cerrada y el run no toca nada' {
+        Mock Get-ReleaseEstado { [pscustomobject]@{ Estado = 'Cerrada'; PasosAplicados = @() } }
+        Invoke-Guard 'pre' 'refs/heads/develop'
+        $script:code | Should -Be 0
+        $script:out | Should -Match '##vso\[task\.logissue type=warning\]La version v1\.2\.0 ya esta cerrada en pre: el run no toca nada\.'
+    }
+    It 'no emite el warning de version cerrada si la version no esta cerrada' {
+        Invoke-Guard 'pre' 'refs/heads/develop'
+        $script:out | Should -Not -Match 'ya esta cerrada'
+    }
     It 'emite version y manifestPath' {
         Invoke-Guard 'pre' 'refs/heads/develop'
         $script:code | Should -Be 0

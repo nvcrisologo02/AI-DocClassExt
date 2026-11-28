@@ -169,6 +169,10 @@ if (-not $SinPermisos) { Test-PermisosGuard }
 
 if ($fallos.Count -gt 0) { exit 2 }
 
+if ($yaAplicada) {
+    # Spec: la version ya aplicada termina en verde sin hacer nada y lo dice (se ve en el resumen del run).
+    Write-Host "##vso[task.logissue type=warning]La version $version ya esta cerrada en ${Environment}: el run no toca nada."
+}
 Write-Host "##vso[task.setvariable variable=version;isOutput=true]$version"
 Write-Host "##vso[task.setvariable variable=manifestPath;isOutput=true]$manifestPath"
 Write-Host "##vso[task.setvariable variable=yaAplicada;isOutput=true]$($yaAplicada.ToString().ToLowerInvariant())"
