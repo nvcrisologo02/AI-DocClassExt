@@ -169,6 +169,8 @@ Ensayada en DEV el 2026-11-27 y 2026-11-28 (rama `feature/101583-pipeline-releas
 | 80306 | dev, `ninguna` | Verde (run D): repetición de A, smoke 6/6 y 3/3, Test Plan run 1077000. |
 | 80307, 80308 | pre, `ninguna` | Rojos en `Guard` por diseño (paso 6): la rama de trabajo no es `develop` y se rechaza antes de tocar PRE. En el 80307 `GuardKudu` dio timeout de 30 s en Admin y AssetResolver; en el 80308 pasó, así que fue transitorio (la comprobación de Kudu reintenta ahora una vez tras 15 s). |
 | 80309 | dev, `simularFalloEn=IA` (sobre 0b9005bd) | Rojo por diseño: vuelta atrás con BD y settings restaurados, ingesta reactivada y reinicio con health correcto. Los tres `Revertir*` no se ejecutan porque `Codigo` no llegó a correr, así que no se redespliega código (lo esperado). Tablas de configuración con los mismos hashes que antes y ninguna fila en `ReleaseAplicada`. |
+| 80311 | dev, `simularFalloEn=Configuracion` (sobre ce5c8211) | Rojo en `Guard`: Kudu del Admin de DEV sin respuesta en los dos intentos de 60 s; DEV sin tocar. Transitorio; se relanzó como 80312. |
+| 80312 | dev, `simularFalloEn=Configuracion` (sobre ce5c8211) | Rojo por diseño, primer run real con las correcciones de la revisión final: vuelta atrás completa con los tres `Revertir*` redesplegando la foto, `Set-ReleaseRevertida` ejecutado al quedar la BD restaurada, resumen con «Vuelta atras: completa». Hashes iguales y ninguna fila del run en `ReleaseAplicada`. |
 
 No se ha ensayado el salto por hash de pasos ya aplicados con una versión real (solo Pester, porque `_ensayo` ignora el registro) ni las altas de configuración (no corren en dev).
 
